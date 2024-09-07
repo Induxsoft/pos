@@ -1,0 +1,170 @@
+#include "dkli.dkh"
+#!
+module "tarjetacredito.dk"
+{
+    @read_query="select #<@sys_fields>, codigo,descripcion,uf_PorComision from #<@table_name> where #<@keyfield>=@_entity_id limit 1;"
+
+	function check_autocode(&db,table,field,&data)
+    {
+        varvalue = dbr.vars.getd(db,"FXCA064","|0000")
+        ref config = dbr.autocode.info(varvalue)
+        new_code = dbr.autocode.new(db,table,field,config)
+
+        data<"codigo">: new_code
+
+        exception {}
+    }
+
+	function cu_error(table)
+    {
+        new fields {
+            @"codigo": "El código"
+			@"descripcion": "La descripción"
+        }
+        do valide_duplicate(fields, table, last_error(), last_error_code())
+    }
+
+	function list(&db, &params)
+    {
+		do dbr.apps.action.grant("VP30")
+
+        query="SELECT #<@sys_fields>, codigo,descripcion,uf_PorComision 
+			FROM tarjetacredito
+            WHERE IF(IFNULL(@s,'')='', true, (codigo LIKE CONCAT('%',@s,'%') OR descripcion LIKE CONCAT('%',@s,'%')))
+            ORDER BY codigo
+            LIMIT #<@default_max_rows>;"
+        return dbr.list(db, ftext(query), params)
+
+		exception
+		{
+    		do errordet(@false)
+    		do dbr.apps.action.log()
+    		do rise_error(last_error_code(),last_error())
+		}
+    }
+
+	function read(&db, &params)
+    {
+		do dbr.apps.action.grant("VP30")
+
+        return entity.read(db, params)
+
+		exception
+		{
+    		do errordet(@false)
+    		do dbr.apps.action.log()
+    		do rise_error(last_error_code(),last_error())
+		}
+    }
+	
+    entity.blank::&db,&params
+	{
+		do dbr.apps.action.grant("VP30")
+
+		new r
+		{
+			@"uf_PorComision":0
+		}
+		return r
+		
+		exception
+		{
+    		do errordet(@false)
+    		do dbr.apps.action.log()
+    		do rise_error(last_error_code(),last_error())
+		}
+
+	}
+
+	tarjeta.create::&db,&params,data
+	{
+		@use_transaction = @false
+
+		do dbr.apps.action.pre("VP31")
+		do dbr.begin(db)
+
+		if @@(data,"uf_PorComision")==""
+		{
+			do field.remove(data,"uf_PorComision")
+		}
+		
+		if @@(data,"codigo")=="" { do check_autocode(db,"tarjetacredito","codigo",data) }
+		
+		ref res = entity.create(db,params,data)
+		
+		do dbr.apps.action.pos(res)
+		do dbr.commit(db)
+		do dbr.apps.action.ext(res)
+
+		return res
+
+		exception
+		{
+			do errordet(@false)
+    		if dbr.in_transaction(db){ do dbr.rollback(db) }
+    		do dbr.apps.action.log()
+			do cu_error("tarjeta")
+			do rise_error(last_error_code(), last_error())
+		}
+	}
+
+	tarjeta.update::&db,&params,data
+	{
+		@use_transaction = @false
+
+		do dbr.apps.action.pre("VP32")
+		do dbr.begin(db)
+
+		if @@(data,"uf_PorComision")==""
+		{
+			do field.remove(data,"uf_PorComision")
+		}
+		
+		ref res = entity.update(db,params,data)
+
+		do dbr.apps.action.pos(res)
+		do dbr.commit(db)
+		do dbr.apps.action.ext(res)
+		
+		return res
+
+		exception
+		{
+			do errordet(@false)
+    		if dbr.in_transaction(db){ do dbr.rollback(db) }
+    		do cu_error("tarjeta")
+			do dbr.apps.action.log()
+			do rise_error(last_error_code(), last_error())
+		}
+	}
+
+	function delete(&db, &params)
+	{
+		@use_transaction = @false
+
+		do dbr.apps.action.pre("VP33")
+		do dbr.begin(db)
+
+        ref res = entity.delete(db, params)
+
+		do dbr.apps.action.pos(res)
+		do dbr.commit(db)
+		do dbr.apps.action.ext(res)
+
+		return res 
+
+		exception
+		{
+    		do errordet(@false)
+    		if dbr.in_transaction(db){ do dbr.rollback(db) }
+    		do dbr.apps.action.log()
+    		do rise_error(last_error_code(),last_error())
+		}
+	}
+
+	point @list to list
+	point @read to read
+	point @create to tarjeta.create
+	point @update to tarjeta.update
+	point @delete to delete
+}

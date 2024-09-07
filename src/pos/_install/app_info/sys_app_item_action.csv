@@ -1,0 +1,13 @@
+"id","title","shorttitle","icon16x16","href","_blank","appid","itemtype","req_context_item_id","act_type"
+
+"VP11","Agregar caja","Agregar","","/!/pos/caja/_new/","0","pos.caja","DET008","0","action"
+"VP12","Editar caja","Editar","","/!/pos/caja/@_src_context_item_id/","0","pos.caja","DET008","1","action"
+"VP13","Eliminar caja","Eliminar","","javascript:InduxsoftCrudlModel.Delete(@_src_context_item_id);","0","pos.caja","DET008","1","action"
+
+"VP21","Agregar cajero","Agregar","","/!/pos/cajero/_new/","0","pos.cajero","DET009","0","action"
+"VP22","Editar cajero","Editar","","/!/pos/cajero/@_src_context_item_id/","0","pos.cajero","DET009","1","action"
+"VP23","Eliminar cajero","Eliminar","","javascript:InduxsoftCrudlModel.Delete(@_src_context_item_id);","0","pos.cajero","DET009","1","action"
+
+"VP31","Agregar targeta","Agregar","","/!/pos/tarjetacredito/_new/","0","pos.tarjetacredito","DET050","0","action"
+"VP32","Editar targeta","Editar","","/!/pos/tarjetacredito/@_src_context_item_id/","0","pos.tarjetacredito","DET050","1","action"
+"VP33","Eliminar targeta","Eliminar","","javascript:InduxsoftCrudlModel.Delete(@_src_context_item_id);","0","pos.tarjetacredito","DET050","1","action"

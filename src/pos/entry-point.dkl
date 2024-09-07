@@ -1,0 +1,82 @@
+#include "dkli.dkh"
+#!
+module "Controller configs"
+{
+	#include "functions.dkh"
+	#include "serialize.dkh"
+	#include "dbr.dkh"
+	#include "dbr.vars.dkl"
+	#include "dbr.apps.dkl"
+	#include "dbr.folios.dkl"
+	#include "dbr.events.dkl"
+	#include "dbr.security.dkl"
+	#include "crudl/crudl.dk"
+	#include "./_lib/config.dk"
+	#include "./_lib/lib.dk"
+
+	@base_path = "pos"
+	@path_root = ""
+
+	if not(field.exist(@@(@http_context,"&session"),"resource")) { @http_context<"session/resource*"> : record.create() }
+	if not(field.exist(@@(@http_context,"&session/resource"),"properties")) { @http_context<"session/resource/properties*"> : record.create() }
+	if not(field.exist(@@(@http_context,"&session/resource/properties"),"web_meta_tags")) { @http_context<"session/resource/properties/web_meta_tags*"> : record.create() }
+	if not(field.exist(@@(@http_context,"&session/resource/properties/web_meta_tags"),"web_page")) {@http_context<"session/resource/properties/web_meta_tags/web_page*"> : record.create()}
+	if not(field.exist(@@(@http_context,"&session/resource/properties"),"web_page")) {@http_context<"session/resource/properties/web_page*"> : record.create()}
+
+	@http_context<"session/resource/properties/web_page/end_head"> : '<script src="/$/pos/js/jquery-3.6.0.min.js"></script><script src="/$/pos/js/definitive.api.js"></script>'
+	
+	// Enmascaramiento de enrutamiento (Ejemplos)
+	// Definición de patrones de rutas con base en parámetros GET (request/get)
+	// do crudl.routes.pattern("/module/submodule/process/subprocess/")
+
+	// Comparación de rutas entrantes y asignación de parámetro _entities_type
+	// if crudl.routes.entity("inventario/movimientos/entrada/confirmar/","inventario-movs.entrada-confirmar")
+    // {
+    //    //Si es la ruta indicada, esto es @true y se asigna _entities_type
+    // }
+	// if crudl.route("inventario/movimientos/entrada/confirmar/")
+	// {
+    //    //Si es la ruta indicada esto es @true pero no se modifica _entities_type
+    // }
+
+	do crudl.routes.pattern("/_program/")
+	do crudl.routes.entity("/caja/","caja")
+	do crudl.routes.entity("/cajero/","cajero")
+	do crudl.routes.entity("/tarjetacredito/","tarjetacredito")
+
+	//No modifique a menos que sepa lo que está haciendo
+	do crudl.load_config()
+	do crudl.loadRoutesJSON()
+	
+	@dbmvc_path="crudl/"
+	
+	
+	@auto_crud=@true
+
+	@db_engine="MY_SQL"	
+
+	@list_view="list.dk"
+	@form_view="form.dk"
+	@error_view="error.dk"
+
+	@entity_id_blank="_new"
+
+	@dkl_view_ext=".dk"
+	@websencia_ext=".jsnwm"
+
+    @crudl.user=""
+    @crudl.pwd=""
+
+	@crudl.enable_idreplacement=@true
+
+    @ws=@@(@http_context,"request/get/ws")
+
+    @crudl.qname=""
+
+	@crudl.access_privilege='
+	{
+		"access":[{"workspace":"'+@ws+'"}]
+	}'
+
+	#include "crudl/controller.dkl"
+}

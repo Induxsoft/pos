@@ -1,0 +1,257 @@
+#include "dkli.dkh"
+#!
+module "form_view_caja.dk"
+{
+	#include "functions.dkh"
+	#include "serialize.dkh"
+    #include "dbr.dkh"
+    #include "uielements.dkl"
+    #include "../_lib/config.dk"
+    #include "../_lib/icons.dk"
+
+	do @context.begin(@crud_context)
+    entity_id = @("$parameters/_entity_id")
+    isNew = (entity_id == "_new")
+
+    ref caja = @('&.')
+    ref caja = record.caseinsensitive(caja)
+
+    new def_cconsumo
+    {
+        @"datatable*":dbr.list(@("&database"),"select sys_pk, codigo, descripcion from cconsumo order by descripcion;",@null)
+        member "attributes"
+        {
+            @"class":"induxsoft-form-select"
+            @"name":"centroconsumo"
+            @"required":"true"
+        }
+
+        @"text_field":"descripcion"
+        @"value_field":"sys_pk"
+        @"selected":@('./centroconsumo')
+    }
+
+    #$ div(class="container p-0")
+    {
+        #! #include "caja.dkl"
+        
+        #$ form(action="." method="POST" id="frm-caja")
+        {
+            div(id="main_bar" class="row container-section my-2 px-0 py-2 border-bottom")
+            {
+                div(class="col-4 d-flex align-items-center p-0")
+                {
+                    h5(class="tex-no-break m-0"){$"#<ifstr(isNew,'Agregar','Editar')> Caja"}
+                }
+                div(class="col-8 d-flex align-items-center justify-content-end p-0 gap-2" id="main_bar_controls")
+                {
+                    a(href="./" class="btn btn-sm border-secondary induxsoft-corners btn-main-action" title="Refrescar"){$"#<@ICON_ARROW_CLOCKWISE>"}
+                    button(type="submit" class="btn btn-sm border-secondary induxsoft-corners btn-main-action"){$"#<@ICON_SAVE>"}
+                    a(href="../" class="btn btn-sm border-secondary induxsoft-corners btn-main-action"){$"#<@ICON_X_LG>"}
+                }
+            }
+            div(id="work_area" class="container-section")
+            {
+                div(class="#<ifstr(@('error/message')!='','alert alert-danger','')>"){$"#<@('error/message')>"}
+
+                div(class="row")
+                {
+                    div(class="col-12 col-sm-2")
+                    {
+                        small(class="fw-bold"){"Código:"}
+                        input(type="text" name="codigo" class="induxsoft-form-control" value="#<@('./codigo')>" maxlength="5" placeholder="<A>")
+                    }
+                    div(class="col-12 col-sm-10")
+                    {
+                        small(class="fw-bold"){"Descripción:"}
+                        input(type="text" name="descripcion" class="induxsoft-form-control" value="#<@('./descripcion')>" required="true" maxlength="50")
+                    }
+                    div(class="col-12 col-sm-6")
+                    {
+                        small{"Codigo de cuenta:"}
+                        input(type="text" name="codcuenta" class="induxsoft-form-control" value="#<@('./codcuenta')>"  maxlength="50")
+                    }
+                    div(class="col-12 col-sm-6")
+                    {
+                        small{"Centro de consumo:"}
+                        #! do uie.dbSelect(def_cconsumo)
+                        #$ br{}
+                    }
+                }
+                
+                input(type="hidden" name="sys_recver" value="#<@('#./sys_recver')>")
+
+                legend{"Efectivo"}
+                div(class="mb-3 row")       
+                {
+                    div(class="col-sm-6")
+                    {
+                        small{"Límite de efectivo:"}
+                        div(class="input-money-container")
+                        {
+                            small(class="input-money-prefix"){$"$"}
+                            input(type="text" name="uf_limefectivo" class="induxsoft-form-control input-number-text" value="#<@('#./uf_limefectivo')>" step="0.0000001" max="999999999.9999999")
+                        }
+                    }
+                    div(class="col-sm-6")
+                    {
+                        small{"Ventas adicionales permitidas:"}
+                        input(type="text" name="uf_lime_vntadic" class="induxsoft-form-control input-number-text" value="#<@('#./uf_lime_vntadic')>" decimal="0" max="999999999")
+                    }
+                    div(class="col-sm-6")
+                    {
+                        small{"Límite para mostrar aviso:"}
+                        div(class="input-money-container")
+                        {
+                            small(class="input-money-prefix"){$"$"}
+                            input(type="text" name="uf_lime_aviso" class="induxsoft-form-control input-number-text" value="#<@('#./uf_lime_aviso')>" step="0.0000001" max="999999999.9999999")
+                        }
+                    }
+                    div(class="col-sm-6")
+                    {
+                        small{"Mensaje de alerta:"}
+                        input(type="text" name="uf_lime_alerta" class="induxsoft-form-control" value="#<@('$./uf_lime_alerta')>" maxlength="500")
+                    }
+                }
+                legend{"Cortes"}
+                div(class="mb-3 row")       
+                {
+                    // div(class="mb-3 row")       
+                    // {
+                    //     div(class="col-sm-6")
+                    //     {
+                    //         // input(type="checkbox" name="uf_corte_req" value="#<@('./uf_corte_req')>")
+                    //         // small(class="form-small"){"Corte requerido"}
+                    //     } 
+                    // } 
+                    div(class="col-6 col-lg-4")
+                    {
+                        small{"Hora corte 1:"}
+                        input(type="time" class="induxsoft-form-control" name="uf_horacorte1" value="#<@('./uf_horacorte1')>")
+                    }
+                    div(class="col-6 col-lg-4")
+                    {
+                        small{"Hora corte 2:"}
+                        input(type="time" class="induxsoft-form-control" name="uf_horacorte2"  value="#<@('./uf_horacorte2')>")
+                    }
+                    div(class="col-6 col-lg-4")
+                    {
+                        small{"Hora corte 3:"}
+                        input(type="time" class="induxsoft-form-control" name="uf_horacorte3" value="#<@('./uf_horacorte3')>")
+                    }
+                    div(class="col-6 col-lg-4")
+                    {
+                        small{"Hora corte 4:"}
+                        input(type="time" class="induxsoft-form-control" name="uf_horacorte4"  value="#<@('./uf_horacorte4')>")
+                    }
+                    div(class="col-6 col-lg-4")
+                    {
+                        small{"Hora corte 5:"}
+                        input(type="time" class="induxsoft-form-control" name="uf_horacorte5"  value="#<@('./uf_horacorte5')>")
+                    }
+                    div(class="mb-3 row")       
+                    {
+                        div(class="col-sm-6")
+                        {
+                            small{"Ventas adicionales permitidas:"}
+                            input(type="text" name="uf_cortereq_vntadic" class="induxsoft-form-control input-number-text" value="#<@('#./uf_cortereq_vntadic')>" decimal="0" step="1" max="999999999")
+                        }
+                        div(class="col-sm-6")
+                        {
+                            small{"Límite de Tickets liberados:"}
+                            input(type="text" name="uf_lim_vntliber" class="induxsoft-form-control input-number-text" value="#<@('#./uf_lim_vntliber')>" decimal="0" step="1" max="999999999")
+                        }
+                        
+                    }
+                }
+                small{"Notas"}
+                div(class="mb-3 row")       
+                {
+                    div(class="col-sm-6")
+                    {
+                        textarea(name="notas" class="induxsoft-form-control" value="#<@('./notas')>"){$'#<@("./notas")>'}
+                    }
+                }
+            }
+            div(id="status_bar" class="container-section")
+            {
+                $""
+            }
+        }
+        style{$'
+            .input-money-container { position: relative; }
+            .input-money-prefix { position: absolute; top: 50%; transform: translateY(-50%); margin-left: 6px; }
+            .input-number-text { padding-left: 16px !important; }
+        '}
+        script{$'
+            document.addEventListener("DOMContentLoaded", () => 
+            {
+                const numberFormatProccess = input =>
+                {
+                    let decs = Number(input.getAttribute("decimal")??"2");
+                    input.addEventListener("keydown", e => checkNumberValue(input,e));
+                    input.addEventListener("keyup", e => fixNumberValue(input));
+                    input.addEventListener("blur", e => setNumberFormat(input, decs, true));
+                }
+                const fixNumberValue = input =>
+                {
+                    let txt=input.value.replace(/[^0-9.,]+/g,"");
+                    let f=false;
+                    input.value = txt.replace(/\\./g,match=>{
+                        if(!f){f=true;return match;} 
+                        else{return"";}
+                    });
+                }
+                const checkNumberValue = (input, event) =>
+                {
+                    let value = Number(input.value.replace(/[^0-9.]+/g, ""));
+                    let isnum = event.key.match(/[0-9,.]+/g);
+                    if(isnum && value>=Number(input.getAttribute("max")??"999999999.9999999")) event.preventDefault();
+                }
+                const setNumberFormat = (input, decimals=0, thousandSeparator=false) =>
+                {
+                    let number = Number(input.value.replace(/[^0-9.]+/g, ""));
+
+                    NumFormat = {
+                        thousands:",",
+                        decimals:"."
+                    }
+
+                    const roundedNumber = number.toFixed(decimals);
+                    let integerPart = "", fractionalPart = "";
+                    
+                    if (decimals == 0) {
+                        integerPart = roundedNumber;
+                        NumFormat.decimals = "";
+                    } else {
+                        let numberParts = roundedNumber.split(".");
+                        integerPart = numberParts[0];
+                        fractionalPart = numberParts[1];
+                    }
+
+                    if (thousandSeparator) integerPart = integerPart.replace(/(\\d)(?=(\\d{3})+(?!\\d))/g, `$1${NumFormat.thousands}`);
+
+                    input.value = `${integerPart}${NumFormat.decimals}${fractionalPart}`;
+                    input.setAttribute("value", input.value.replace(/[^0-9.]+/g,""));
+                }
+
+                const inputsNumber = document.querySelectorAll(".input-number-text");
+                inputsNumber.forEach(input => {
+                    numberFormatProccess(input);
+                });
+
+                const form = document.querySelector("#frm-caja");
+                form.addEventListener("submit", e => {
+                    inputsNumber.forEach(input => {
+                        input.value = input.value.replace(/[^0-9.]+/g,"");
+                    });
+                });
+            });
+        '}
+    }
+
+	#! do @context.end()
+}
+
+
+                           

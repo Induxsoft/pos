@@ -1,0 +1,61 @@
+#include "dkli.dkh"
+#!
+module "form.dk"
+{
+    #include "functions.dkh"
+    #include "dbr.dkh"
+    #include "../_lib/config.dk"
+    #include "../_lib/icons.dk"
+
+    do @context.begin(@crud_context)
+    entity_id = @("$parameters/_entity_id")
+    isNew = (entity_id == "_new")
+
+    #$ div(class="container p-0")
+    {
+        form(action="." method="POST")
+        {
+            div(id="main_bar" class="row container-section my-2 px-0 py-2 border-bottom")
+            {
+                div(class="col-4 d-flex align-items-center p-0")
+                {
+                    h5(class="tex-no-break m-0"){$"#<ifstr(isNew,'Agregar','Editar')> Tarjeta de Crédito"}
+                }
+                div(class="col-8 d-flex align-items-center justify-content-end p-0 gap-2" id="main_bar_controls")
+                {
+                    a(href="./" class="btn btn-sm border-secondary induxsoft-corners btn-main-action" title="Refrescar"){$"#<@ICON_ARROW_CLOCKWISE>"}
+                    button(type="submit" class="btn btn-sm border-secondary induxsoft-corners btn-main-action"){$"#<@ICON_SAVE>"}
+                    a(href="../" class="btn btn-sm border-secondary induxsoft-corners btn-main-action"){$"#<@ICON_X_LG>"}
+                }
+            }
+            div(id="work_area" class="container-section")
+            {
+                div(class="#<ifstr(@('error/message')!='','alert alert-danger','')>"){$"#<@('error/message')>"}
+                input(type="hidden" name="sys_recver" value="#<@('./sys_recver')>")
+
+                div(class="row mb-2")
+                {
+                    div(class="col-sm-2")
+                    {
+                        small(class="fw-bold"){"Código:"} 
+                        input(type="text" class="induxsoft-form-control" name="codigo" value="#<@('./codigo')>" maxlength="5" placeholder="<A>")
+                    }
+                    div(class="col-sm-8")
+                    {
+                        small(class="fw-bold"){"Descripción:"}
+                        input(type="text" class="induxsoft-form-control" name="descripcion" value="#<@('./descripcion')>" required="true" maxlength="25")
+                    }
+                    div(class="col-sm-2")
+                    {
+                        small{"Porcentaje de Comisión:"}
+                        input(type="number" class="induxsoft-form-control" name="uf_PorComision" value="#<@('#./uf_PorComision')>" step="0.00000001" max="9999999999.99999999")
+                    }
+                }
+                //input(type="text" class="induxsoft-form-control" name="codigo" value="#<field.dstr(data,'codigo','')>" required="true" maxlength="5")
+                
+            }
+        }
+    }
+    #!
+    do @context.end()
+}

@@ -1,0 +1,49 @@
+#include "dkli.dkh"
+#!
+module "list_view_cajero.dk"
+{
+	#include "functions.dkh"
+	#include "../_lib/config.dk"
+
+	@gender="o"
+    @title="Cajeros"
+
+	do @context.begin(@crud_context)
+	ref @http_context=@("&http")
+	
+    new @table_definition
+    {
+    	@"datatable*":@("&.")
+    	member @"columns"
+        {
+        	member @"codigo"
+        	{
+        		@"caption":"Código"
+        	}
+        	member @"nombre"
+        	{
+        		@"caption":"Nombre"
+        	}
+			member @"telefono"
+			{
+				@"caption":"Teléfono"
+			}
+			member @"email"
+			{
+				@"caption":"Email"
+			}
+        	member @"_actions"
+        	{
+        		@"caption":"Acción"
+        	}
+        }
+    }
+	#$
+    div(class="m-0 justify-content-center")
+	{
+    	#!
+    	#include "cajero.dk"
+    	include @path_common
+    }
+	do @context.end()
+}

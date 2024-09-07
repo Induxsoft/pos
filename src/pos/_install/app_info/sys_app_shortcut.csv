@@ -1,0 +1,4 @@
+"id","title","icon96x96","src","_blank","appid","cat"
+"VP10","Cajas","/$/pos/img/icons/caja.png","/!/pos/caja/","0","pos.caja","0090"
+"VP20","Cajeros","/$/pos/img/icons/cajero.png","/!/pos/cajero/","0","pos.cajero","0090"
+"VP30","Tarjetas aceptadas","/$/pos/img/icons/tarjetas.png","/!/pos/tarjetacredito/","0","pos.tarjetacredito","0090"

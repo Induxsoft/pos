@@ -1,0 +1,42 @@
+#include "dkli.dkh"
+#!
+module "list.dk"
+{
+    #include "functions.dkh"
+    #include "../_lib/config.dk"
+
+    @gender="a"
+    @title="Tarjetas de aceptadas"
+
+    new @table_definition
+    {
+        @"datatable*":@@(@crud_context,"&.")
+        member @"columns"
+        {
+            member @"codigo"
+            {
+                @"caption":"Código"
+            }
+            member @"descripcion"
+            {
+                @"caption":"Descripción"
+            }
+            member @"_actions"
+            {
+                @"caption":"Acciones"
+                
+            }
+        }
+    }
+
+    #$
+    div
+    {
+    	#!
+        #include "tarjetacredito.dkl"
+        include @path_common
+    }
+
+    #!
+	do @context.end()
+}

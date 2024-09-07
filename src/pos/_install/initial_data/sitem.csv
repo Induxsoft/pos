@@ -1,0 +1,17 @@
+﻿itemid,description,itemparent
+pos,Punto de Venta,\0
+pos.caja,Cajas,pos
+VP10,Cajas,pos.caja
+VP11,Agregar caja,pos.caja
+VP12,Editar caja,pos.caja
+VP13,Eliminar caja,pos.caja
+pos.cajero,Cajeros,pos
+VP20,Cajeros,pos.cajero
+VP21,Agregar cajero,pos.cajero
+VP22,Editar cajero,pos.cajero
+VP23,Eliminar cajero,pos.cajero
+pos.tarjetacredito,Tarjetas aceptadas,pos
+VP30,Tarjetas aceptadas,pos.tarjetacredito
+VP31,Agregar targeta,pos.tarjetacredito
+VP32,Editar tarjeta,pos.tarjetacredito
+VP33,Eliminar tarjeta,pos.tarjetacredito

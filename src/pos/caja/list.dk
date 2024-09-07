@@ -1,0 +1,51 @@
+#include "dkli.dkh"
+#!
+module "list_view_caja.dk"
+{
+	#include "functions.dkh"
+	#include "serialize.dkh"
+	#include "../_lib/config.dk"
+
+	@gender="a"
+    @title="Cajas"
+
+	do @context.begin(@crud_context)
+
+	ref @http_context=@("&http")
+	
+	new @table_definition
+    {
+    	@"datatable*":@("&.")
+    	member @"columns"
+        {
+        	member @"codigo"
+        	{
+        		@"caption":"Código"
+        	}
+        	member @"descripcion"
+        	{
+        		@"caption":"Descripción"
+        	}
+			member @"codcuenta"
+        	{
+        		@"caption":"Código de cuenta"
+        	}
+			member @"descon"
+        	{
+        		@"caption":"Centro de consumo"
+        	}
+        	member @"_actions"
+        	{
+        		@"caption":"Acción"
+        	}
+        }
+    }
+    #$
+    div(class="m-0 justify-content-center" )
+	{
+    	#!
+    	#include "caja.dkl"
+    	include @path_common
+    }
+	do @context.end()
+}

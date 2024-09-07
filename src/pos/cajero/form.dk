@@ -1,0 +1,92 @@
+#include "dkli.dkh"
+#!
+module "form.dk"
+{
+	#include "functions.dkh"
+	#include "serialize.dkh"
+	#include "dbr.dkh"
+    #include "uielements.dkl"
+    #include "../_lib/config.dk"
+    #include "../_lib/icons.dk"
+
+	do @context.begin(@crud_context)
+    entity_id = @("$parameters/_entity_id")
+    isNew = (entity_id == "_new")
+
+    #$ div(class="container p-0")
+    {
+        form(action="." method="POST")
+        {
+            div(id="main_bar" class="row container-section m-0 p-0 my-2 px-0 py-2 border-bottom")
+            {
+                div(class="col-4 d-flex align-items-center p-0")
+                {
+                    h5(class="tex-no-break m-0"){$"#<ifstr(isNew,'Agregar','Editar')> Cajero"}
+                }
+                div(class="col-8 d-flex align-items-center justify-content-end p-0 gap-2" id="main_bar_controls")
+                {
+                    a(href="./" class="btn btn-sm border-secondary induxsoft-corners btn-main-action" title="Refrescar"){$"#<@ICON_ARROW_CLOCKWISE>"}
+                    button(type="submit" class="btn btn-sm border-secondary induxsoft-corners btn-main-action" title="Guardar"){$"#<@ICON_SAVE>"}
+                    a(href="../" class="btn btn-sm border-secondary induxsoft-corners btn-main-action" title="Salir"){$"#<@ICON_X_LG>"}
+                }
+            }
+            div(id="work_area" class="container-section pt-2")
+            {
+                div(class="#<ifstr(@('error/message')!='','alert alert-danger','')>"){$"#<@('error/message')>"}
+
+                input(type="hidden" class="form-control" id="sys_recver" name="sys_recver" value="#<@('./sys_recver')>")
+                input(type="hidden" class="form-control" id="sys_pk" name="sys_pk" value="#<field.dstr(@('&./'),'sys_pk',0)>")
+
+                div(class="mb-2 row")       
+                {
+                    div(class="col-sm-2")
+                    {
+                        small("style"="font-weight:bold"){"Código:"}
+                        input(type="text" class="induxsoft-form-control" id="codigo" name="codigo" value="#<@('$./codigo')>" maxlength="10" placeholder="<A>")
+                    }
+                    div(class="col-sm-4")
+                    {
+                        small("style"="font-weight:bold"){"Nombre:"}
+                        input(type="text" class="induxsoft-form-control" id="nombre" name="nombre" value="#<@('$./nombre')>" maxlength="50")
+                    } 
+                }
+                div(class="mb-2 row") 
+                {
+                    div(class="col-sm-3")
+                    {
+                        small("style"="font-weight:bold"){"Contraseña:"}
+                        input(type="password" name="contrasena" class="induxsoft-form-control" id="contrasena" value="#<@('$./contrasena')>" maxlength="32")
+                    }
+                }
+                div(class="mb-2 row") 
+                {
+                    div(class="col-sm-3")
+                    {
+                        small{"Teléfono"}
+                        input(type="text" name="telefono" class="induxsoft-form-control" id="telefono" value="#<@('$./telefono')>" maxlength="25")
+                    }
+                }
+                div(class="mb-2 row") 
+                {
+                    div(class="col-sm-3")
+                    {
+                        small{"Email"}
+                        input(type="email" class="induxsoft-form-control" id="email" name="email" value="#<@('$./email')>" maxlength="50")
+                    }
+                }
+                div(class="col-sm-6")
+                {
+                    small{"Notas"}
+                    textarea(class="induxsoft-form-control" id="notas" name="notas" value="#<@('$./notas')>"){$"#<@('$./notas')>"}
+                }
+
+            }
+            div(id="status_bar" class="container-section")
+            {
+                $""
+            }
+        }
+    }
+
+    #! do @context.end()
+}

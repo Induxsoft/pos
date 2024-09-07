@@ -1,0 +1,9 @@
+#include "dkli.dkh"
+#!
+module
+{
+	@title=""
+	@gender="o"
+	@path_common="pos/_common/list.dk"
+	@default_max_rows=250
+}

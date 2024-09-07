@@ -1,0 +1,111 @@
+#include "ddm.dkh"
+model "erp.pos"
+{
+    #include "induxsoft.abstracts.ddm"
+
+    //#region Domicilio
+    entity "pais" : "TableModel"
+    {
+        @"codigo" string(8) unique required
+        @"codigotel" string(5)
+        @"nombre" string(100) unique required
+    }
+    entity "edoprov" : "TableModel"
+    {
+        @"codigo" string(8) unique required
+        @"nombre" string(50) required
+        @"ipais" int ref:"pais" ["sys_pk"] required
+    }
+    entity "ciudad" : "TableModel"
+    {
+        @"codigo" string(8) unique required
+        @"codigotel" string(5)
+        @"nombre" string(100) required
+        @"estado" int ref:"edoprov" ["sys_pk"] required
+    }
+    entity "domicilio" : "TableModel"
+    {
+        @"codpos" string(10)
+        @"colonia" string(150)
+        @"direccion" string(1024)
+        @"notas" string(150)
+        @"telefonos" string(150)
+        @"iciudad" int ref:"ciudad" ["sys_pk"]
+        @"numint" string(1024)
+        @"numext" string(1024)
+    }
+    //#endregion
+
+    entity "almacen" : "TableModel"
+    {
+        @"codcuenta" string(50) unique
+        @"codigo" string(10) unique required
+        @"descripcion" string(50) unique required
+        @"email" string(50)
+        @"fax" string(150)
+        @"telefonos" string(150)
+        @"website" string(150)
+        @"domicilio1" ref:"domicilio"
+        @"uf_movremoto" bool
+        @"uf_inhabilitado" bool
+        @"uf_fechainhabilitacion" datetime
+        @"uf_formaproduccion" int
+    }
+
+    entity "cconsumo" : "TableModel"
+    {
+        @"codigo" string(5) unique required
+        @"descripcion" string(50) unique required
+        @"notas" string(2048)
+        @"precio" int
+        @"ialmacen" ref:"almacen"
+        @"porcentaje_esperado" decimal(19,8)
+        @"uf_domiciliocfd" int
+        @"uf_expedicioncxc" int
+        @"uf_inhabilitado" bool
+        @"uf_fechainhabilitacion" datetime
+        @"uf_grupoprod" int
+    }
+
+    entity "caja" : "TableModel"
+    {
+        @"codcuenta" string(50) unique
+        @"codigo" string(5) unique required
+        @"descripcion" string(50) unique
+        @"notas" string(2048)
+        @"centroconsumo" ref:"cconsumo" required
+        @"uf_limefectivo" decimal(18,8)
+        @"uf_lime_vntadic" int
+        @"uf_lime_aviso" decimal(18,8)
+        @"uf_lime_alerta" string(500)
+        @"uf_lime_pkprimerventa" int
+        @"uf_corte_req" bool
+        @"uf_horacorte1" time
+        @"uf_horacorte2" time
+        @"uf_horacorte3" time
+        @"uf_horacorte4" time
+        @"uf_horacorte5" time
+        @"uf_cortereq_vntadic" int
+        @"uf_lim_vntliber" int
+    }
+
+    entity "cajero" : "TableModel"
+    {
+        @"codigo" string(10) unique required
+        @"codnomina" string(50) unique
+        @"contrasena" string(32) required
+        @"email" string(50)
+        @"nombre" string(50) unique required
+        @"notas" string(2048)
+        @"telefono" string(25)
+        @"domicilio1" ref:"domicilio"
+        @"uf_sys_baja" bool
+    }
+
+    entity "tarjetacredito" : "TableModel"
+    {
+        @"codigo" string(5) unique required
+        @"descripcion" string(25) unique required
+        @"uf_porcomision" decimal(18,8) 
+    }
+}

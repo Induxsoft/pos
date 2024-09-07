@@ -1,0 +1,191 @@
+#include "dkli.dkh"
+#!
+module "caja.dk"
+{
+	@read_query="select #<@sys_fields>,codigo,descripcion,centroconsumo,codcuenta,
+	uf_limefectivo,uf_lime_vntadic,uf_lime_aviso,uf_lime_alerta,uf_corte_req,
+	DATE_FORMAT(uf_horacorte1,'%H:%i') as uf_horacorte1,
+	DATE_FORMAT(uf_horacorte2,'%H:%i') as uf_horacorte2,
+	DATE_FORMAT(uf_horacorte3,'%H:%i') as uf_horacorte3,
+	DATE_FORMAT(uf_horacorte4,'%H:%i') as uf_horacorte4,
+	DATE_FORMAT(uf_horacorte5,'%H:%i') as uf_horacorte5,
+	uf_cortereq_vntadic,uf_lim_vntliber,notas
+	from caja where #<@keyfield>=@_entity_id limit 1;"
+	
+	function check_autocode(&db,table,field,&data)
+    {
+        varvalue = dbr.vars.getd(db,"FXCA049","|0000")
+        ref config = dbr.autocode.info(varvalue)
+        new_code = dbr.autocode.new(db,table,field,config)
+
+        data<"codigo">: new_code
+
+		exception
+		{
+			do errordet(@false)
+			do rise_error(last_error_code(),last_error())
+		}
+    }
+
+	function cu_error(table)
+    {
+        new fields {
+            @"codigo": "El código"
+			@"descripcion": "La descripción"
+			@"codcuenta": "El código de cuenta"
+        }
+        do valide_duplicate(fields, table, last_error(), last_error_code())
+    }
+
+	function list(&db, &params)
+    {
+		do dbr.apps.action.grant("VP10")
+        query="SELECT c.Sys_PK, c.sys_guid, c.sys_dtcreated, c.sys_timestamp, c.sys_recver,c.sys_deleted, c.sys_lock, c.codigo, c.descripcion,c.codcuenta,mo.descripcion AS descon 
+			FROM caja c 
+				LEFT JOIN cconsumo mo ON c.centroconsumo=mo.Sys_PK
+            WHERE ifnull(c.sys_deleted,0)=0
+				AND IF(IFNULL(@s,'')='', true, (c.codigo LIKE CONCAT('%',@s,'%') OR c.descripcion LIKE CONCAT('%',@s,'%')))
+            ORDER BY c.codigo
+            LIMIT #<@default_max_rows>;"
+        return dbr.list(db, ftext(query), params)
+		exception
+		{
+			do errordet(@false)
+			do dbr.apps.action.log()
+			do rise_error(last_error_code(),last_error())
+		}
+    }
+
+	caja.read::&db,&params
+	{
+		do dbr.apps.action.grant("VP10")
+		
+		ref caja=entity.read(db,params)
+		// caja<"centroConsumo*">:dbr.rec("select sys_pk,sys_recver,codigo,descripcion,notas,precio,ialmacen,uf_domiciliocfd,uf_expedicioncxc,uf_inhabilitado,
+		// 	uf_fechainhabilitacion,uf_grupoprod,porcentaje_esperado from cconsumo where sys_pk=1",caja)
+		return caja
+		
+		exception
+		{
+			do errordet(@false)
+			do dbr.apps.action.log()
+			do rise_error(last_error_code(),last_error())
+		}
+	}
+
+	entity.blank::&db,&params
+	{
+		do dbr.apps.action.grant("VP10")
+		new r
+		{
+			@"uf_limefectivo":0
+			@"uf_lime_vntadic":0
+			@"uf_lime_aviso":0
+			@"uf_cortereq_vntadic":0
+			@"uf_lim_vntliber":0
+			@"uf_horacorte1":"00:00"
+			@"uf_horacorte2":"00:00"
+			@"uf_horacorte3":"00:00"
+			@"uf_horacorte4":"00:00"
+			@"uf_horacorte5":"00:00"
+		}
+		return r
+	}
+
+	caja.create::&db,&params,&data
+	{
+		@use_transaction = @false
+
+		do dbr.apps.action.pre("VP11")
+		do dbr.begin(db)
+		if @@(data,"CodCuenta")==""
+		{
+			do field.remove(data,"CodCuenta")
+		}
+
+		data<"uf_limefectivo">: @@(data, "#uf_limefectivo")
+		data<"uf_lime_vntadic">: @@(data, "#uf_lime_vntadic")
+		data<"uf_lime_aviso">: @@(data, "#uf_lime_aviso")
+		data<"uf_cortereq_vntadic">: @@(data, "#uf_cortereq_vntadic")
+		data<"uf_lim_vntliber">: @@(data, "#uf_lim_vntliber")
+		
+		if @@(data,"codigo")=="" { do check_autocode(db,"caja","codigo",data) }
+		ref res = entity.create(db,params,data)
+		do dbr.apps.action.pos(res)
+		do dbr.commit(db)
+		do dbr.apps.action.ext(res)
+		return res
+
+		exception
+		{
+			do errordet(@false)
+    		if dbr.in_transaction(db){ do dbr.rollback(db) }
+			do dbr.apps.action.log()
+			do rise_error(last_error_code(),last_error())
+		}
+	}
+
+	caja.update::&db,&params,&data
+	{
+		@use_transaction = @false
+
+		do dbr.apps.action.pre("VP12")
+		do dbr.begin(db)
+		if @@(data,"CodCuenta")==""
+		{
+			do field.remove(data,"CodCuenta")
+		}
+
+		if field.exist(data,"uf_limefectivo") && trim(@@(data,"$uf_limefectivo")) == "" { data<"uf_limefectivo">: 0 }
+		if field.exist(data,"uf_lime_vntadic") && trim(@@(data,"$uf_lime_vntadic")) == "" { data<"uf_lime_vntadic">: 0 }
+		if field.exist(data,"uf_lime_aviso") && trim(@@(data,"$uf_lime_aviso")) == "" { data<"uf_lime_aviso">: 0 }
+		if field.exist(data,"uf_cortereq_vntadic") && trim(@@(data,"$uf_cortereq_vntadic")) == "" { data<"uf_cortereq_vntadic">: 0 }
+		if field.exist(data,"uf_lim_vntliber") && trim(@@(data,"$uf_lim_vntliber")) == "" { data<"uf_lim_vntliber">: 0 }
+
+		do dbr.execute(db, "UPDATE caja SET sys_recver=0 WHERE sys_recver IS NULL AND sys_pk=@_entity_id;", params)
+        do dbr.execute(db, "UPDATE caja SET sys_lock=null WHERE sys_lock=0 AND sys_pk=@_entity_id;", params)
+		ref res = entity.update(db,params,data)
+		do dbr.apps.action.pos(res)
+		do dbr.commit(db)
+		do dbr.apps.action.ext(res)
+		return res 
+		
+		exception
+		{
+			do errordet(@false)
+    		if dbr.in_transaction(db){ do dbr.rollback(db) }
+    		do dbr.apps.action.log()
+    		do rise_error(last_error_code(),last_error())
+		}
+	}
+
+	function caja.delete(&db, &params)
+	{
+		@use_transaction = @false
+
+		do dbr.apps.action.pre("VP13")
+		do dbr.begin(db)
+		// intentar borrado físico
+        ref res =  entity.delete(db, params)
+
+		do dbr.apps.action.pos(res)
+		do dbr.commit(db)
+		do dbr.apps.action.ext(res)
+		return res 
+        
+        exception
+        {
+		 	do errordet(@false)
+			if dbr.in_transaction(db){ do dbr.rollback(db) }
+			do dbr.apps.action.log()
+			do rise_error(last_error_code(),last_error())
+        }
+		return @true
+	}
+	
+	point @read to caja.read
+	point @create to caja.create
+	point @update to caja.update
+	point @list to list
+	point @delete to caja.delete
+}
