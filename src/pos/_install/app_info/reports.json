@@ -1,0 +1,30 @@
+[
+    {
+        "id": "pos",
+        "title": "Punto de venta",
+        "queries": [
+            {
+                "actid":"VP40",
+                "id":"pos.vp40",
+                "title":"Consulta de cortes por caja",
+                "qry":"select\r\n    co.sys_pk as folio,\r\n    ca.nombre as cajero,\r\n    if(ifnull(co.cerrado,false),'S\u00ED','No')cerrado,\r\n    date_format(co.fapertura,'%Y-%m-%d')fapertura,\r\n    date_format(co.fcierre,'%Y-%m-%d')fcierre,\r\n    date_format(co.hapertura,'%r')hapertura,\r\n    date_format(co.hcierre,'%r')hcierre\r\nfrom\r\n    corte co\r\n    inner join cajero ca on co.icajero = ca.sys_pk\r\nwhere\r\n    if(ifnull(@caja,'*')='*' or ifnull(@caja,'')='',true,co.icaja = @caja)\r\norder by\r\n    co.sys_pk desc;\r\n",
+                "properties":{"layout":"document"},
+                "parameters":{"caja":{"default":"","id":"caja","name":"caja","caption":"Caja:","control":"Select","required":false,"readonly":false,"disabled":false,"wrp_attr":{"class":"col-lg-4"},"source":{"first_value":"*","first_text":"Todos(*)","type":"query","query":"Select sys_pk,concat(codigo,' ',descripcion) caja from caja order by codigo,descripcion;","keyfield":"sys_pk","showfield":"caja"}}},
+                "design":{"show_summary":false,"summary_group":false,"group_by":"","id":"table_corte","attributes":{"class":"table"},"rows_attributes":{"header":{},"begin_group":{},"detail":{},"summary_group":{},"summary":{}},"columns":{"folio":{"caption":"Folio","format":"","summary":"none","attributes":{},"anchor":{"href":"/!/dbext/query/pos.vp41/?corte=@folio"},"visible":true},"cajero":{"caption":"Cajero","format":"","summary":"none","attributes":{},"anchor":{},"visible":true},"cerrado":{"caption":"Cerrado","format":"","summary":"none","attributes":{"class":"text-center"},"anchor":{},"visible":true},"fapertura":{"caption":"Fecha apertura","format":"","summary":"none","attributes":{},"anchor":{},"visible":true},"fcierre":{"caption":"Fecha cierre","format":"","summary":"none","attributes":{},"anchor":{},"visible":true},"hapertura":{"caption":"Hora apertura","format":"","summary":"none","attributes":{},"anchor":{},"visible":true},"hcierre":{"caption":"Hora cierre","format":"","summary":"none","attributes":{},"anchor":{},"visible":true}}},
+                "app":"ventas.venta",
+                "det":"DET08C"
+            },
+            {
+                "actid":"vp41",
+                "id":"pos.vp41",
+                "title":"Consulta de movimiento de caja por caja y cajero",
+                "qry":"select\r\n    m.sys_pk as folio,\r\n    date_format(m.fecha,'%Y-%m-%d')fecha,\r\n    date_format(m.hora,'%r')hora,\r\n    m.referencia,\r\n    c.descripcion as categoria,\r\n    d.const as documento,\r\n    m.efectivo,\r\n    m.cheques,\r\n    m.tarjetas,\r\n    m.vales,\r\n    m.depositos,\r\n    dv.descripcion,\r\n    m.notas,\r\n    ifnull(v.sys_pk,0) pk_venta\r\nfrom\r\n    movcaja m\r\n    inner join categoria c on m.icategoria = c.sys_pk\r\n    inner join cdocumentos d on m.documento = d.id\r\n    inner join divisa dv on m.idivisa = dv.sys_pk\r\n    left JOIN venta v ON m.sys_pk=v.imovcaja\r\nwhere\r\n    if(ifnull(@corte,'*')='*' or ifnull(@corte,'')='',true, m.icorte = @corte);",
+                "properties":{"layout":"view"},
+                "parameters":{"corte":{"default":"","id":"corte","name":"corte","caption":"Corte:","control":"InputKey","required":false,"readonly":false,"disabled":false,"wrp_attr":{"class":"col-lg-4"},"source":{"columns":"sys_pk,corte","ccaptions":"#,Corte","obj_data":[{"column":"sys_pk","caption":"#"},{"column":"corte","caption":"Corte"}],"type":"query","query":"Select co.sys_pk,concat(c.codigo,' ',c.descripcion,' ',cj.codigo,' ',cj.nombre,' ', co.fapertura,' ', time(co.hapertura), ' ', if(ifnull(co.cerrado,0)=0,'Abierto','Cerrado') ) corte from corte co inner join caja c on co.icaja=c.sys_pk inner join cajero cj on co.icajero=cj.sys_pk where if(@key is null,c.codigo like concat('%',@search,'%') or c.descripcion like concat('%',@search,'%'), co.sys_pk=@key) order by co.sys_pk desc;","keyfield":"sys_pk","showfield":"corte","searchfield":"sys_pk"}}},
+                "design":{"show_summary":false,"summary_group":false,"group_by":"","id":"table_movcaja","attributes":{"class":"table"},"rows_attributes":{"header":{},"begin_group":{},"detail":{},"summary_group":{},"summary":{}},"columns":{"folio":{"caption":"Folio","format":"","summary":"none","attributes":{},"anchor":{"href":"/!/ventas/venta/@pk_venta/"},"visible":true},"fecha":{"caption":"Fecha","format":"","summary":"none","attributes":{},"anchor":{},"visible":true},"hora":{"caption":"Hora","format":"","summary":"none","attributes":{},"anchor":{},"visible":true},"referencia":{"caption":"Referencia","format":"","summary":"none","attributes":{},"anchor":{},"visible":true},"categoria":{"caption":"Categor\u00EDa","format":"","summary":"none","attributes":{},"anchor":{},"visible":true},"documento":{"caption":"Documento","format":"","summary":"none","attributes":{},"anchor":{},"visible":true},"efectivo":{"caption":"Efectivo","format":"$ #,#.00","summary":"none","attributes":{},"anchor":{},"visible":true},"cheques":{"caption":"Cheques","format":"$ #,#.00","summary":"none","attributes":{},"anchor":{},"visible":true},"tarjetas":{"caption":"Tarjetas","format":"$ #,#.00","summary":"none","attributes":{},"anchor":{},"visible":true},"vales":{"caption":"Vales","format":"$ #,#.00","summary":"none","attributes":{},"anchor":{},"visible":true},"depositos":{"caption":"Depositos","format":"$ #,#.00","summary":"none","attributes":{},"anchor":{},"visible":true},"descripcion":{"caption":"Divisa","format":"","summary":"none","attributes":{},"anchor":{},"visible":true},"notas":{"caption":"Notas","format":"","summary":"none","attributes":{},"anchor":{},"visible":true},"pk_venta":{"caption":"pk_venta","format":"","summary":"none","attributes":{},"anchor":{},"visible":false}}},
+                "app":"ventas.venta",
+                "det":"DET08C"
+            }
+        ]
+    }
+]
