@@ -15,3 +15,5 @@ VP30,Tarjetas aceptadas,pos.tarjetacredito
 VP31,Agregar targeta,pos.tarjetacredito
 VP32,Editar tarjeta,pos.tarjetacredito
 VP33,Eliminar tarjeta,pos.tarjetacredito
+VP40,Consulta de cortes por caja,pos
+vp41,Consulta de movimiento de caja por caja y cajero,pos
