@@ -1,0 +1,142 @@
+#include "dkli.dkh"
+#!
+program ""
+{
+    #include "functions.dkh"
+    #include "serialize.dkh"
+    #include "dbr.dkh"
+    #include "webcl.dkh"
+    #include "r5.lib.dk"
+    #include "r5.dkh" //Funciones de interoperabilidad con versiones R5 de Induxsoft
+    
+    //1.- Obetener los args
+    ref args=commandline("=")
+    if trim(@@(args,"$qn"))==""{do rise_error(99,"No ha indicado el parámetro 'qn' (Nombre cualificado a una conexión) ")}
+    if trim(@@(args,"$uri"))==""{do rise_error(99,"No ha indicado el parámetro 'url' (URL del servicio) ")}
+    if trim(@@(args,"$uid"))==""{do rise_error(99,"No ha indicado el parámetro 'uid' (usuario)")}
+    if trim(@@(args,"$pwd"))==""{do rise_error(99,"No ha indicado el parámetro 'pwd' (contraseña del usuario)")}
+
+    //variables globales
+    @qname=trim(@@(args,"$qn"))
+    @uri=trim(@@(args,"$uri"))
+    @uid=trim(@@(args,"$uid"))
+    @pwd=trim(@@(args,"$pwd"))
+
+    //1.- conectar a la base de datos
+    
+    ref db=dbr.open(@qname)
+
+    //2.- realizar petición al servicio y parsear la respuesta
+    //prepara petición
+    new h{@"content-type":"application/json"}
+    new data
+    {
+        @"uid":@uid
+        @"pwd":@pwd
+    }
+    
+    do print("====Realizando solicitud de datos====")
+
+    res=http.request(@uri,"POST",h,to.json(data))
+    ref result=from.json(res)
+    if not(@@(result,"#success")){do rise_error(99,@@(result,"$message"))}
+
+    do print("====Datos obtenidos correctamente====")
+
+    ref data=@@(result,"&data")
+
+    ref @function_validate=@null
+    do @context.begin(data)
+    //3.-  realizar el proceso de importación
+    ref divisas=@("&divisas")
+    ref cajeros=@("&cajeros")
+    ref agentes=@("&agentes")
+    ref marcas=@("&marcas")
+    ref departamentos=@("&departamentos")
+    ref repartidores=@("&repartidores")
+    ref almacenes=@("&almacenes")
+    ref cfgimpuestos=@("&cfgimpuestos")
+    ref cconsumos=@("&cconsumo")
+    ref cproduccion=@("&cproduccion")
+    ref cajas=@("&cajas")
+    ref tipoclientes=@("&tipoclientes")
+    ref clientes=@("&clientes")
+    // ref ubicacion=@("&ubicacion")
+    
+    ref lineas=@("&lineas")
+    ref productos=@("&productos")
+    ref precios_x_cliente=@("&precios_x_cliente")
+
+    do print("====Importar divisas: "+str(@count(divisas))+" ====")
+    // do Importar.data(db,divisas,"divisa",@null)
+
+    do print("====Importar cajeros: "+str(@count(cajeros))+" ====")
+    // do Importar.data(db,cajeros,"cajero",@null)
+
+    do print("====Importar agentes: "+str(@count(agentes))+" ====")
+    // do Importar.data(db,agentes,"agente",@null)
+
+    do print("====Importar marcas: "+str(@count(marcas))+" ====")
+    // do Importar.data(db,marcas,"marca",@null)
+
+    do print("====Importar departamentos: "+str(@count(departamentos))+" ====")
+    // do Importar.data(db,departamentos,"departamento",@null)
+
+    do print("====Importar repartidores: "+str(@count(repartidores))+" ====")
+    // do Importar.data(db,repartidores,"repartidor",@null)
+
+    do print("====Importar almacenes: "+str(@count(almacenes))+" ====")
+    // do Importar.data(db,almacenes,"almacen",@null)
+
+    do print("====Importar configuración de impuestos: "+str(@count(cfgimpuestos))+" ====")
+    point @function_validate to ValidateCfgImpueto
+    // do Importar.data(db,cfgimpuestos,"cfgimpuesto",@function_validate)
+
+    do print("====Importar tipos de clientes: "+str(@count(tipoclientes))+" ====")
+    // do Importar.data(db,tipoclientes,"tipocliente",@null)
+
+    do print("====Importar clientes: "+str(@count(clientes))+" ====")
+    point @function_validate to ValidateCliente
+    // do Importar.data(db,clientes,"cliente",@function_validate)
+
+    do print("====Importar centro de consumos: "+str(@count(cconsumos))+" ====")
+    point @function_validate to ValidateCConsumo
+    // do Importar.data(db,cconsumos,"cconsumo",@function_validate)
+
+    do print("====Importar centro de producción: "+str(@count(cproduccion))+" ====")
+    point @function_validate to ValidateCProduccion
+    do Importar.data(db,cproduccion,"cproduccion",@function_validate)
+
+    // do print("====Importar cajas====")
+    // do Importar.data(db,cajas,"caja",@null)
+
+    // //importar linea, pide una clase
+    // do print("====Importar línea====")
+    // do Importar.data(db,lineas,"linea",@null)
+
+    // //importar producto
+    // do print("====Importar productos====")
+    // do Importar.producto(db,productos)
+    // //importar precio de venta
+    // do print("====Importar precio de venta por cliente====")
+    // do Importar.precioventa(db,precios_x_cliente)
+
+    // do print("====Proceso terminado correctamente====")
+    do @context.end()
+    //control de exception general
+    exception
+    {
+        do print("Error: "+last_error())
+        if isset("db")
+        {
+            //si la bd esta abierta, realizar los siguiente.
+            if dbr.is_open(db)
+            {
+                //si la bd esta en transacción, deshacer todo
+                if  dbr.in_transaction(db){do dbr.rollback(db)}
+                //cerrar base de datos
+                do dbr.close(db)
+            }
+        }
+    }
+}
