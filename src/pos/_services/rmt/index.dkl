@@ -1,0 +1,67 @@
+#include "dkli.dkh"
+#!
+module "POS Services"
+{
+    #include "functions.dkh"
+    #include "serialize.dkh"
+    #include "webcl.dkh"
+    #include "dbr.dkh"
+    #include "dbr.vars.dkl"
+	#include "dbr.apps.dkl"
+	#include "dbr.folios.dkl"
+	#include "dbr.events.dkl"
+	#include "dbr.security.dkl"
+    #include "website.dkl"
+    #include "pos/rmt/model.dk"
+    
+    go api_base_service(method:method, params:params, payload:postData, response:response)
+    {
+        if method != "GET" && method!="POST" { do rise_error(511,"Método proporcionado no admitido") }
+        if method=="GET"{ref postData=params}
+
+        @__user=trim(@@(postData,"$uid"))
+        @__pwd=trim(@@(postData,"$pwd"))
+        
+        //abrir base de datos con usuario y contraseña
+        do dbr.setHashUnicode(@true)
+        ref db = get_db()
+
+        that @list(db,postData)->*data
+
+        using response
+        {
+            @"data*":data
+        }
+
+        if isset("@open_connection")
+        {
+            if @open_connection 
+            {
+                do dbr.close(db)
+                @http_context<"session/idp/database*"> : db
+            }
+        }
+
+        exception
+        {
+            do errordet(@false)
+            if isset("@open_connection")
+            {
+                if @open_connection 
+                {
+                    do dbr.close(db)
+                    @http_context<"session/idp/database*"> : db
+                }
+            }
+
+            code = last_error_code()
+            error = last_error()
+
+            using response
+            {
+                @"success": @false
+                @"message": error
+            }
+        }
+    }
+}

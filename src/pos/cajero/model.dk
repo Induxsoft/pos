@@ -5,7 +5,7 @@ module "cajero.dk"
     @read_query="
         select 
             sys_pk, sys_guid, sys_recver, sys_timestamp, sys_dtcreated, sys_deleted, 
-            codigo, email, nombre, telefono, contrasena, notas
+            codigo, email, nombre, telefono, contrasena, notas,ubicacion
         from cajero 
         where #<@keyfield>=@_entity_id 
         limit 1;"
@@ -50,8 +50,9 @@ module "cajero.dk"
     {
 		do dbr.apps.action.grant("VP20")
 		
-        return entity.read(db, params)
-		
+        ref entity= entity.read(db, params)
+		if @@(entity,"$ubicacion")!=""{entity<"ubicacion*">:dbr.rec(db,"select * from ubicacion where sys_pk=@ubicacion",entity)}
+        return entity
 		exception
 		{
 			do errordet(@false)
@@ -71,6 +72,7 @@ module "cajero.dk"
 		data<"sys_pk">:parse.num(@@(data,"#sys_pk"))
 
         if field.exist(data,"contrasena") { data<"contrasena">:toupper(md5e(@@(data,"$contrasena"), "Unicode")) }
+        if field.exist(data,"ubicacion") && trim(@@(data,"$ubicacion"))==""{data<"ubicacion*">:@null}
 
         if @@(data,"codigo")=="" { do check_autocode(db,"cajero","codigo",data) }
     	ref res= entity.create(db,params,data)
@@ -104,7 +106,7 @@ module "cajero.dk"
         {
             data<"contrasena">:toupper(md5e(@@(data,"$contrasena"), "Unicode"))
         }
-
+        if field.exist(data,"ubicacion") && trim(@@(data,"$ubicacion"))==""{data<"ubicacion*">:@null}
         do dbr.execute(db, "UPDATE cajero SET sys_recver=0 WHERE sys_recver IS NULL AND sys_pk=@_entity_id;", params)
         do dbr.execute(db, "UPDATE cajero SET sys_lock=null WHERE sys_lock=0 AND sys_pk=@_entity_id;", params)
 

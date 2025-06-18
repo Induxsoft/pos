@@ -79,6 +79,20 @@ module "form.dk"
                     small{"Notas"}
                     textarea(class="induxsoft-form-control" id="notas" name="notas" value="#<@('$./notas')>"){$"#<@('$./notas')>"}
                 }
+                div(class="col-md-6")
+                {
+                    small{"Ubicación:"}
+                    "input-key"(
+                        name="ubicacion" 
+                        id="ubicacion" 
+                        "data-key"="sys_pk" 
+                        "data-search"="codigo" 
+                        "data-text"="descripcion" 
+                        "data-source"="#<@UBICACIONES>?s=@search" 
+                        "data-value"="#<to.json(@('&./ubicacion'))>" 
+                        columns="codigo,descripcion" 
+                        colcaptions="Código,Descripción"){$""}
+                }
 
             }
             div(id="status_bar" class="container-section")

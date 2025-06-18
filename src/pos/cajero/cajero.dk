@@ -66,7 +66,8 @@ script{
 					telefonos:$("#telefono").val(),
 					iciudad:$("#ciudad").val(),
 					// "sys_pk":$("#dom_sys_pk").val()
-				}
+				},
+				"ubicacion":$("input[name=\'ubicacion\']").val()
 			};
 			var mthd="";
 			if(Number($("#sys_pk").val())>0){mthd="PUT";}

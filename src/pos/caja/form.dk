@@ -75,7 +75,22 @@ module "form_view_caja.dk"
                     {
                         small{"Centro de consumo:"}
                         #! do uie.dbSelect(def_cconsumo)
-                        #$ br{}
+                        #$
+                    }
+                    div(class="col-md-6")
+                    {
+                        small{"Ubicación:"}
+                        "input-key"(
+                            name="ubicacion" 
+                            id="ubicacion" 
+                            "data-key"="sys_pk" 
+                            "data-search"="codigo" 
+                            "data-text"="descripcion" 
+                            "data-source"="#<@UBICACIONES>?s=@search" 
+                            "data-value"="#<to.json(@('&./ubicacion'))>" 
+                            columns="codigo,descripcion" 
+                            colcaptions="Código,Descripción"){$""}
+                        br{}
                     }
                 }
                 
@@ -164,11 +179,12 @@ module "form_view_caja.dk"
                         
                     }
                 }
-                small{"Notas"}
+                
                 div(class="mb-3 row")       
                 {
                     div(class="col-sm-6")
                     {
+                        small{"Notas"}
                         textarea(name="notas" class="induxsoft-form-control" value="#<@('./notas')>"){$'#<@("./notas")>'}
                     }
                 }

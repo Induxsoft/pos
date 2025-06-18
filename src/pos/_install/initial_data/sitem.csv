@@ -17,3 +17,5 @@ VP32,Editar tarjeta,pos.tarjetacredito
 VP33,Eliminar tarjeta,pos.tarjetacredito
 VP40,Consulta de cortes por caja,pos
 vp41,Consulta de movimiento de caja por caja y cajero,pos
+pos.exportar,"Exportar datos POS",pos
+VP50,"Exportar datos POS",pos.exportar

@@ -87,8 +87,13 @@ model "erp.pos"
         @"uf_horacorte5" time
         @"uf_cortereq_vntadic" int
         @"uf_lim_vntliber" int
+        @"ubicacion" ref:"ubicacion"
     }
-
+    entity "ubicacion" : "TableModel"
+    {
+        @"codigo" string(10) unique required
+        @"descripcion" string(50) required
+    }
     entity "cajero" : "TableModel"
     {
         @"codigo" string(10) unique required
@@ -100,6 +105,7 @@ model "erp.pos"
         @"telefono" string(25)
         @"domicilio1" ref:"domicilio"
         @"uf_sys_baja" bool
+        @"ubicacion" ref:"ubicacion"
     }
 
     entity "tarjetacredito" : "TableModel"

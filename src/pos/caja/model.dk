@@ -9,7 +9,7 @@ module "caja.dk"
 	DATE_FORMAT(uf_horacorte3,'%H:%i') as uf_horacorte3,
 	DATE_FORMAT(uf_horacorte4,'%H:%i') as uf_horacorte4,
 	DATE_FORMAT(uf_horacorte5,'%H:%i') as uf_horacorte5,
-	uf_cortereq_vntadic,uf_lim_vntliber,notas
+	uf_cortereq_vntadic,uf_lim_vntliber,notas,ubicacion
 	from caja where #<@keyfield>=@_entity_id limit 1;"
 	
 	function check_autocode(&db,table,field,&data)
@@ -61,6 +61,7 @@ module "caja.dk"
 		do dbr.apps.action.grant("VP10")
 		
 		ref caja=entity.read(db,params)
+		if @@(caja,"$ubicacion")!=""{caja<"ubicacion*">:dbr.rec(db,"select * from ubicacion where sys_pk=@ubicacion",caja)}
 		// caja<"centroConsumo*">:dbr.rec("select sys_pk,sys_recver,codigo,descripcion,notas,precio,ialmacen,uf_domiciliocfd,uf_expedicioncxc,uf_inhabilitado,
 		// 	uf_fechainhabilitacion,uf_grupoprod,porcentaje_esperado from cconsumo where sys_pk=1",caja)
 		return caja
@@ -108,7 +109,8 @@ module "caja.dk"
 		data<"uf_lime_aviso">: @@(data, "#uf_lime_aviso")
 		data<"uf_cortereq_vntadic">: @@(data, "#uf_cortereq_vntadic")
 		data<"uf_lim_vntliber">: @@(data, "#uf_lim_vntliber")
-		
+		if field.exist(data,"ubicacion") && trim(@@(data,"$ubicacion"))==""{data<"ubicacion*">:@null}
+
 		if @@(data,"codigo")=="" { do check_autocode(db,"caja","codigo",data) }
 		ref res = entity.create(db,params,data)
 		do dbr.apps.action.pos(res)
@@ -135,7 +137,7 @@ module "caja.dk"
 		{
 			do field.remove(data,"CodCuenta")
 		}
-
+		if field.exist(data,"ubicacion") && trim(@@(data,"$ubicacion"))==""{data<"ubicacion*">:@null}
 		if field.exist(data,"uf_limefectivo") && trim(@@(data,"$uf_limefectivo")) == "" { data<"uf_limefectivo">: 0 }
 		if field.exist(data,"uf_lime_vntadic") && trim(@@(data,"$uf_lime_vntadic")) == "" { data<"uf_lime_vntadic">: 0 }
 		if field.exist(data,"uf_lime_aviso") && trim(@@(data,"$uf_lime_aviso")) == "" { data<"uf_lime_aviso">: 0 }
