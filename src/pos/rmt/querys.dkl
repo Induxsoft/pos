@@ -1,0 +1,180 @@
+#include "dkli.dkh"
+#!
+module "Consultas para la exportación"
+{
+    //prepare querys
+    //obtener las columnas de las tablas con consulta
+    //     SELECT lower(GROUP_CONCAT(DISTINCT COLUMN_NAME) 
+    // )FROM INFORMATION_SCHEMA.COLUMNS 
+    // WHERE TABLE_SCHEMA ='database'
+    // and TABLE_NAME = 'table'
+    // AND COLUMN_NAME NOT LIKE 'sys_%'
+
+    @_system_fileds="sys_pk,sys_guid"
+    @list_ubicaciones="select #<@_system_fileds>,codigo,descripcion,notas from ubicacion where codigo=@_entiy_id"
+
+    @list_cconsumo="select cc.sys_pk,cc.sys_guid,
+        cc.codigo,cc.descripcion,cc.notas,cc.precio,a.codigo almacen,
+        cc.porcentaje_esperado,cc.uf_domiciliocfd,cc.uf_expedicioncxc,
+        cc.uf_inhabilitado,date_format(cc.uf_fechainhabilitacion,'%Y-%m-%d %H:%i:%s') uf_fechainhabilitacion,cc.uf_grupoprod,
+        cfdi_emisor
+        from cconsumo cc
+        left join almacen a on cc.ialmacen=a.sys_pk
+        where (ifnull(@ubicacion,'')='' or cc.ubicacion=@ubicacion)"
+
+    @list_cproducion="SELECT cp.sys_pk,cp.sys_guid,cp.codigo,cp.descripcion,mp.codigo almacenmp,pt.codigo almacenpt
+         from cproduccion cp
+         INNER JOIN almacen mp ON cp.almacenmp=mp.sys_pk
+         INNER JOIN almacen pt ON cp.almacenpt=pt.sys_pk
+			where (ifnull(@ubicacion,'')='' or cp.ubicacion=@ubicacion)"
+
+    @list_lineas_rel="SELECT l.sys_pk,l.sys_guid,l.clase,l.codigo,l.color,
+    l.comision1,l.comision2,l.comision3,l.comision4,l.comision5,
+    l.descripcion,l.notas,l.visible,l.uf_indicaciones,l.img_file
+        FROM linea l
+    INNER JOIN ut_cc_linea ccl ON l.sys_pk=ccl.uf_ilinea
+    INNER JOIN cconsumo cc ON ccl.uf_icc=cc.sys_pk
+    WHERE cc.ubicacion=@ubicacion"
+
+    @list_lineas="select l.sys_pk,l.sys_guid,l.clase,l.codigo,l.color,
+    l.comision1,l.comision2,l.comision3,l.comision4,l.comision5,
+    l.descripcion,l.notas,l.visible,l.uf_indicaciones,l.img_file from linea l"
+
+    @__inner_join_prod="INNER JOIN ut_cc_linea ccl ON l.sys_pk=ccl.uf_ilinea
+        INNER JOIN cconsumo cc ON ccl.uf_icc=cc.sys_pk"
+    
+    @__conditional_prod="cc.ubicacion=@ubicacion;"
+
+    @list_productos_rel="SELECT p.sys_pk,p.sys_guid,
+    p.adicional,p.cdirecto,p.cindirecto,p.cmanoobra,p.cmaquinaria,p.codbar1,p.codbar2,p.codbar3,p.codigo,
+    p.color,p.comision,p.comision1,p.comision2,p.comision3,p.comision4,p.comision5,p.costopromedio,p.costoultimo,
+    p.data1,p.data2,p.data3,p.desc2,p.desc3,p.desc4,p.desc5,p.descripcion,p.diasentrega,p.existencia,p.factorb,
+    p.factorc,p.factord,p.factore,p.flaglimites,p.flagutilidad,p.formacomision,p.iclase,p.itipo,p.lim2,p.lim3,
+    p.lim4,p.lim5,p.maximo,p.metodovaluacion,p.minimo,p.notas,p.padic1,p.padic2,p.padic3,p.padic4,p.padic5,
+    p.ppuntos,p.precio1,p.precio2,p.precio3,p.precio4,p.precio5,p.puntoro,p.reqlote,p.reqserie,p.saldo,
+    p.tipocomision,p.unidad,p.unidadb,p.unidadc,p.unidadd,p.unidade,p.util1,p.util2,p.util3,p.util4,p.util5,
+    p.utilmin,p.vinculardata,p.visible,
+    p.ivariables,p.uf_solicitarcantidad,
+    p.uf_sys_baja,p.uf_complemento,p.precio106,p.precio107,
+    p.precio108,p.precio109,p.precio110,p.precio111,p.precio112,p.precio113,
+    l.codigo linea,
+    dp.codigo departamento,
+    d.codigo divisa,
+    m.codigo marca,
+    ci.nombre impuestos,
+    p1.codigo proveedor1,
+    p2.codigo proveedor2,
+    p3.codigo proveedor3,
+    cp.const clase,
+    tp.const tipo,
+    cfp.const formacomision,
+    cme.const metodovaluacion,
+    ctp.const tipocomision
+    FROM producto p 
+        INNER JOIN linea l ON p.ilinea=l.sys_pk
+        INNER JOIN cclaseproducto cp ON p.iclase=cp.id
+        INNER JOIN ctipoproducto tp on p.itipo=tp.id
+        INNER JOIN cmetodosvaluacion cme ON p.metodovaluacion=cme.id
+        LEFT JOIN ctiposcomisionesproducto ctp ON p.tipocomision=ctp.id
+        LEFT JOIN departamento dp ON p.idepartamento=dp.sys_pk
+        LEFT JOIN cformacomisionproducto cfp ON p.formacomision=cfp.id
+        INNER JOIN divisa d ON p.idivisa=d.sys_pk
+        LEFT JOIN marca m ON p.imarca=m.sys_pk
+        INNER JOIN cfgimpuesto ci ON p.impuestos=ci.sys_pk
+        LEFT JOIN proveedor p1 ON p.proveedor1=p1.sys_pk
+        LEFT JOIN proveedor p2 ON p.proveedor2=p2.sys_pk
+        LEFT JOIN proveedor p3 ON p.proveedor3=p3.sys_pk
+        #<@__inner_join_prod>
+    WHERE #<@__conditional_prod>"
+
+    @list_cajas="select #<@_system_fileds>,codcuenta,codigo,descripcion,notas,centroconsumo,
+    uf_limefectivo,uf_lime_vntadic,uf_lime_aviso,uf_lime_alerta,uf_lime_pkprimerventa,
+    uf_corte_req,
+    date_format(uf_horacorte1,'%H:%i:%s')uf_horacorte1,
+    date_format(uf_horacorte3,'%H:%i:%s')uf_horacorte3,
+    date_format(uf_horacorte4,'%H:%i:%s')uf_horacorte4,
+    date_format(uf_horacorte5,'%H:%i:%s')uf_horacorte5,
+    uf_cortereq_vntadic,
+    uf_lim_vntliber
+    from caja where (ifnull(@ubicacion,'')='' or ubicacion=@ubicacion)"
+
+    @list_cajeros="select #<@_system_fileds>,codigo,codnomina,contrasena,
+    email,nombre,notas,telefono,domicilio1,uf_sys_baja 
+    from cajero where (ifnull(@ubicacion,'')='' or ubicacion=@ubicacion)"
+
+    @list_agentes="select #<@_system_fileds>,codigo,codnomina,
+    email,nombre,notas,pcomision,telefono,
+    uf_capitan,uf_sys_baja,uf_iuser 
+    from agente where (ifnull(@ubicacion,'')='' or ubicacion=@ubicacion)"//domicilio1,
+
+    @list_repartidores="select #<@_system_fileds>,codigo,codnomina,
+    email,nombre,notas,telefono,uf_sys_baja 
+    from repartidor where (ifnull(@ubicacion,'')='' or ubicacion=@ubicacion)"//domicilio1,
+
+    @list_almacenes="select #<@_system_fileds>,codcuenta,codigo,descripcion,
+    email,fax,telefonos,website,uf_movremoto,uf_inhabilitado,
+    date_format(uf_fechainhabilitacion,'%Y-%m-%d %H:%i:%s')uf_fechainhabilitacion,uf_formaproduccion,clase 
+    from almacen where (ifnull(@ubicacion,'')='' or ubicacion=@ubicacion)"//domicilio1,
+
+    @list_marcas="select #<@_system_fileds>,codigo,descripcion from marca"
+
+    @list_departamentos="select #<@_system_fileds>,codigo,comision1,comision2,
+    comision3,comision4,comision5,descripcion from departamento"
+
+    @list_impuestos="select #<@_system_fileds>,i1compra,i1venta,i2compra,
+    i2venta,i3compra,i3venta,i4compra,i4venta,nombre,uf_tipoi1,uf_tipoi2,
+    uf_tipoi3,uf_tipoi4,tasa,objetoimp  from cfgimpuesto"
+
+    @list_tipoclientes="select #<@_system_fileds>,codigo,descripcion,notas from tipocliente"
+
+    @list_clientes="select c.sys_pk,c.sys_guid,c.codigo,c.nombre,
+    d.codigo divisa,tc.codigo tipo,
+    c.codcuenta,c.curp,c.descuento,
+    c.diascredito,c.email,c.fax,c.limitecredito,c.monedero,c.notas,c.precio,c.puntos,c.rfc,c.saldo,c.saldopuntos,c.status,
+    c.telefonos,c.website,c.agente,c.contacto1,c.contacto2,c.contacto3,c.zona,
+    c.uf_sys_baja,c.uf_addenda,c.regfiscal,c.cfdi_emisor
+    from cliente c 
+    INNER JOIN divisa d on c.idivisa=d.sys_pk
+    INNER JOIN tipocliente tc on c.tipo=tc.sys_pk"//c.domicilio1,c.domicilio2,c.domicilio3,
+
+    @list_precios_clientes="select pv.sys_pk,pv.sys_guid,pv.limite,pv.precio,
+    p.codigo producto,c.codigo cliente 
+    from precioventa pv
+    INNER JOIN producto p ON pv.producto=p.sys_pk
+    INNER JOIN cliente c ON pv.fk_cliente_listaprecios=c.sys_pk"
+
+    @list_divisas="select #<@_system_fileds>,codigo,descripcion,tcambio,decimales from divisa"
+
+    @list_variables="SELECT iv.sys_pk,iv.cdirectoprom,iv.cindirectoprom,
+    iv.cmanoobraprom,iv.cmaquinariaprom,iv.descripcion,
+    iv.`factor`,iv.maximo,iv.minimo,ad.const padicional,gp.nombre grupo,p.codigo producto 
+    FROM ivariable iv
+    INNER JOIN grupoproductos gp ON iv.grupo=gp.sys_pk
+    INNER JOIN cimpadicionales ad ON iv.padicional=ad.id
+    INNER JOIN producto p ON iv.fk_producto_ivariables=p.sys_pk
+    LEFT JOIN grupoproductos_cconsumo_ gpcc ON gp.sys_pk=gpcc.igrupoproducto
+    LEFT JOIN cconsumo cc ON gpcc.iconsumo=cc.sys_pk
+    WHERE iv.fk_producto_ivariables=@producto and if(IFNULL(@ubicacion,0)=0,TRUE,cc.ubicacion=@ubicacion)"
+
+    @list_gruposproductos="SELECT gp.sys_pk,gp.comision1,
+    gp.comision2,gp.comision3,
+    gp.comision4,gp.comision5,gp.nombre,gp.notas,gp.tasa_iva
+    FROM grupoproductos gp
+    INNER JOIN ivariable iv ON iv.grupo=gp.sys_pk
+    LEFT JOIN grupoproductos_cconsumo_ gpcc ON gp.sys_pk=gpcc.igrupoproducto
+    LEFT JOIN cconsumo cc ON gpcc.iconsumo=cc.sys_pk
+    WHERE if(IFNULL(@ubicacion,0)=0,TRUE,cc.ubicacion=@ubicacion);"
+
+    @list_ensamble="select ie.sys_pk,ie.sys_guid,cantdemasiado,cantidad,
+    cantmucho,cantpoco,omitible,pe.codigo elemento,pr.codigo reemplazo,p.codigo producto  
+    from iensamble ie
+    INNER JOIN producto pe ON ie.elemento=pe.sys_pk
+    LEFT JOIN producto pr ON ie.reemplazo=pr.sys_pk
+    INNER JOIN producto p ON ie.fk_producto_elementos=p.sys_pk
+    INNER JOIN linea l ON p.ilinea=l.sys_pk
+    LEFT JOIN ut_cc_linea ccl ON l.sys_pk=ccl.uf_ilinea
+   	LEFT JOIN cconsumo cc ON ccl.uf_icc=cc.sys_pk
+    WHERE if(IFNULL(@ubicacion,0)=0,TRUE,cc.ubicacion=@ubicacion)"
+
+
+}

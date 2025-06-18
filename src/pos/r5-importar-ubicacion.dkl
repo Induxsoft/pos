@@ -65,7 +65,10 @@ program ""
     
     ref lineas=@("&lineas")
     ref productos=@("&productos")
+    ref productos_elementos=@("&productos_elementos")
+    ref productos_remplazos=@("&productos_remplazos")
     ref precios_x_cliente=@("&precios_x_cliente")
+    ref ensambles=@("&ensambles")
 
     do print("====Importar divisas: "+str(@count(divisas))+" ====")
     // do Importar.data(db,divisas,"divisa",@null)
@@ -105,18 +108,29 @@ program ""
 
     do print("====Importar centro de producción: "+str(@count(cproduccion))+" ====")
     point @function_validate to ValidateCProduccion
-    do Importar.data(db,cproduccion,"cproduccion",@function_validate)
+    // do Importar.data(db,cproduccion,"cproduccion",@function_validate)
 
-    // do print("====Importar cajas====")
+    do print("====Importar cajas: "+str(@count(cajas))+" ====")
     // do Importar.data(db,cajas,"caja",@null)
 
     // //importar linea, pide una clase
-    // do print("====Importar línea====")
+    do print("====Importar línea: "+str(@count(lineas))+" ====")
     // do Importar.data(db,lineas,"linea",@null)
 
     // //importar producto
-    // do print("====Importar productos====")
-    // do Importar.producto(db,productos)
+    do print("====Importar productos: "+str(@count(productos))+" ====")
+    do Importar.producto(db,productos)
+    
+    do print("====Importar productos de ensambles o recetas constantes: "+str(@count(productos_elementos))+" ====")
+    do Importar.producto(db,productos_elementos)
+
+    do print("====Importar productos de ensambles y remplazos: "+str(@count(productos_remplazos))+" ====")
+    do Importar.producto(db,productos_remplazos)
+
+    do print("====Importar ensambles o recetas constantes: "+str(@count(ensambles))+" ====")
+    point @function_validate to ValidateEnsamble
+    do Importar.data(db,ensambles,"iensamble",@function_validate)
+
     // //importar precio de venta
     // do print("====Importar precio de venta por cliente====")
     // do Importar.precioventa(db,precios_x_cliente)

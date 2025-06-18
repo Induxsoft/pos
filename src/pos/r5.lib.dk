@@ -2,6 +2,26 @@
 #!
 module ""
 {
+    Record_enum::&db,table,field,value
+    {
+        new p{}
+        p<field>:value
+        return dbr.rec(db,"select id,const from "+table+" where "+field+"=@"+field+";",p)
+    }
+    Record_enum_explicit::&db,&registro, columna, tabla, byfield,getfield
+    {
+        if field.exist(registro,columna)
+        {
+            ref k=Record_enum(db,tabla,byfield,field.str(registro,columna))
+            if isnull(k){return}
+            
+            registro<columna>:@@(k,getfield)
+
+            return k
+        }
+
+        return @null
+    }
     CopyRecord::&record1,&record2
     {
         ref lrecord=list.create_from_fields(record2)
@@ -19,11 +39,11 @@ module ""
             do field.remove(record,list.str(lf,i))
         }
     }
-    Importar.row::&db,&row,table,campo,value
+    Importar.row::&db,&row,table,campo,value,conditional,id
     {
-        sys_pk=obtener_clave(db,table,campo,value)
-        _text=@@(row,"$"+campo)
-        if sys_pk < 1
+        _text=ifstr(trim(@@(row,"$"+campo))!="",@@(row,"$"+campo),str(id))
+        
+        if id < 1
         {
             ref new_row:default_r5_entity()
             do CopyRecord(row,new_row)
@@ -32,10 +52,14 @@ module ""
         }
         else 
         {
-            do dbr.update(db,table,row,ftext("#<campo>=@#<campo>"),row)
+            conditional=ifstr(trim(conditional)!="",conditional,"#<campo>=@#<campo>")
+
+            do dbr.update(db,table,row,ftext(conditional),row)
             do print(" - "+table+" "+_text+" actualizado")
         }
     }
+ 
+
     @__delfields="sys_pk,sys_guid,sys_deleted"
     //Función global
     Importar.data::&db,&data,table,&funct_validate
@@ -44,19 +68,70 @@ module ""
         {
             ref _dt=@item(data,i)
             //prevenir campos de sistema
-            do DeleteFields(_dt,@__delfields)
+            do DeleteFieldsByTable(_dt,table)
+            
             campo="codigo"
+            ref res=record.create()
+            //ejecutar función si no es nulo
             if not(isnull(funct_validate))
             {
                 that funct_validate(db,data,_dt,table,i)->*res
                 if @@(res,"$_field")!=""{campo=@@(res,"$_field")}
             }
-
-            do Importar.row(db,_dt,table,campo,@@(_dt,"$"+campo))
+            //verificar el id, si no existe buscarlo mediante el campo indicado
+            if not(field.exist(res,"id"))
+            {
+                res<"id">:obtener_clave(db,table,campo,@@(_dt,"$"+campo))
+            }
+            //si continue es true no se realiza la importación
+            if not(parse.bool(@@(res,"continue")))
+            {
+                //insertar o actualizar fila
+                do Importar.row(db,_dt,table,campo,@@(_dt,"$"+campo),@@(res,"$conditional"),@@(res,"#id"))
+            }
 
             exception
             {
                 do print("Error a importar "+table+": "+last_error())
+            }
+        }
+    }
+    //esto para prevenir que vengan otros campos que no son parte de r5
+    DeleteFieldsByTable::&row,table
+    {
+        //eliminar campos de systema sys_ (por si lo hubiera)
+        do DeleteFields(row,@__delfields)
+        switch table
+        {
+            case "divisa"
+            {
+                do DeleteFields(row,"decimales")
+                break
+            }
+            case "agente"
+            {
+                do DeleteFields(row,"uf_capitan")
+                break
+            }
+            case "almacen"
+            {
+                do DeleteFields(row,"clase")
+                break
+            }
+            case "cliente"
+            {
+                do DeleteFields(row,"cfdi_emisor")
+                break
+            }
+            case "cconsumo"
+            {
+                do DeleteFields(row,"cfdi_emisor")
+                break
+            }
+            case "linea"
+            {
+                do DeleteFields(row,"uf_indicaciones,img_file")
+                break
             }
         }
     }
@@ -70,12 +145,16 @@ module ""
                     "
     Importar.producto::&db,&productos
     {
+        if isnull(productos) || @count(productos)< 1{return}
         //Alias conocidos de columnas de la tabla producto
-    
+        ref ldetalle=list.create()
+        //Insertar productos
         for i = 0; i < @count(productos)
         {
-            ref producto=@item(@productos,i)
-
+            ref producto=@item(productos,i)
+            
+            do DeleteFields(producto,@__delfields)
+            do DeleteFields(producto,"detalle,gruposproductos,variables,uf_solicitarcantidad")
             //Campos requeridos que si no están establecidos se les asigna un valor predeterminado
             //Esta sección de código es ilustrativa y debería usarse únicamente como guía
             do set_default(producto, "linea","0001")
@@ -88,19 +167,22 @@ module ""
             do clave_codigo(db,producto, "linea")
             do clave_codigo(db,producto, "marca")
             do clave_codigo(db,producto, "departamento")  
-            do clave_codigo(db,producto, "clase")  
-            //verificar si el campo clase trae datos
-            // do clave_enum_explicit(db,producto, "clase","cclaseproducto","const")
-            do clave_codigo_explicit(db,producto, "impuestos","cfgimpuesto","nombre")
             
-            ///////////////////////////////////////////////////////////////////////////////////////
+            do clave_enum_explicit(db,producto, "clase","cclaseproducto","const")  
+            do clave_enum_explicit(db,producto, "tipo","ctipoproducto","const")  
+            do clave_enum_explicit(db,producto, "metodovaluacion","cmetodosvaluacion","const")  
 
-            //Reemplazo de campos que se importan indicando una clave de texto pero que son un valor numérico correspondiente a una enumeración
-            do clave_enum(producto, "metodovaluacion", @metodos_valuacion)
-            ///////////////////////////////////////////////////////////////////////////////////////
+            do Record_enum_explicit(db,producto, "formacomision","cformacomisionproducto","const","#id")  
+            do Record_enum_explicit(db,producto, "tipocomision","ctiposcomisionesproducto","const","#id")  
+            //verificar si el campo clase trae datos
+            do clave_codigo_explicit(db,producto, "proveedor1","proveedor","codigo")
+            do clave_codigo_explicit(db,producto, "proveedor2","proveedor","codigo")
+            do clave_codigo_explicit(db,producto, "proveedor3","proveedor","codigo")
+            do clave_codigo_explicit(db,producto, "impuestos","cfgimpuesto","nombre")
             
             //Reemplazar alias conocidos
             ref producto:record.copyexin(producto,@null,"*","",@__alias_columnas,":")
+            
             ///////////////////////////////////////////////////////////////////////////////////////
 
             //Inserta o actualiza con base en el código
@@ -145,7 +227,7 @@ module ""
     //funciones de validaciones
     ValidateCfgImpueto::&db,&data,&row,table,index
     {
-        new res{@"field":"nombre"}
+        new res{@"_field":"nombre"}
         return res
     }
     ValidateCliente::&db,&data,&row,table,index
@@ -187,5 +269,34 @@ module ""
             @"almacenmp":id_almacenmp
             @"almacenpt":id_almacenpt
         }
+    }
+    ValidateEnsamble::&db,&data,&row,table,index
+    {
+        id_producto_elm=obtener_clave(db,"producto","codigo",@@(row,"$elemento"))
+        id_producto_remp=obtener_clave(db,"producto","codigo",@@(row,"$reemplazo"))
+        id_producto=obtener_clave(db,"producto","codigo",@@(row,"$producto"))
+        
+        if id_producto_elm< 1{do rise_error(99,"No se econtro el producto:"+@@(row,"$elemento"))}
+        if id_producto< 1{do rise_error(99,"No se econtro el producto:"+@@(row,"$producto"))}
+
+        if id_producto_remp > 0{row<"reemplazo">:id_producto_remp}
+
+        using row
+        {
+            @"elemento":id_producto_elm
+            @"fk_producto_elementos":id_producto
+        }
+        id =dbr.num(db,"select sys_pk from iensamble where elemento=@elemento and fk_producto_elementos=@fk_producto_elementos",row)
+        new res
+        {
+            id:=id
+        }
+
+        if id > 0
+        {
+            res<"conditional">:"elemento=@elemento and fk_producto_elementos=@fk_producto_elementos"
+        }
+        do field.remove(row,"producto")
+        return res
     }
 }
