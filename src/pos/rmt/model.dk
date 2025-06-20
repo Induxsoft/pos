@@ -58,6 +58,11 @@ module ""
             @"variables*":list.create()
             @"productos_elementos*":list.create()
             @"productos_remplazos*":list.create()
+            @"cproducionproductos*":list.create()
+        }
+        if TableExist(db,"cproduccion_producto_")
+        {
+            data_export<"cproducionproductos*">:dbr.list(db,ftext(@list_cproducion_productos),entity)
         }
         if TableExist(db,"ivariable")
         {

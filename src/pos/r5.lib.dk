@@ -2,18 +2,21 @@
 #!
 module ""
 {
+    //Verifica si existe la tabla indicada
     TableExist::&db,table
     {
         table >> p
         name_table=dbr.str(db,"SHOW TABLES LIKE '"+table+"';",p)
         return trim(name_table)!=""
     }
+    //Obtiene los datos de un enumerable con base al campo indicado
     Record_enum::&db,table,field,value
     {
         new p{}
         p<field>:value
         return dbr.rec(db,"select id,const from "+table+" where "+field+"=@"+field+";",p)
     }
+    //Verifica si existe el campo y es asi, realiza la busqueda del enumerable indicado y se le asigna el valor obtenido a la columna indicada con base al campo getField(id)
     Record_enum_explicit::&db,&registro, columna, tabla, byfield,getfield
     {
         if field.exist(registro,columna)
@@ -28,6 +31,7 @@ module ""
 
         return @null
     }
+    //Copia los datos de un registro origen a un registro destino
     CopyRecord::&record1,&record2
     {
         ref lrecord=list.create_from_fields(record2)
@@ -37,6 +41,7 @@ module ""
             record1<f>:@@(record2,f)
         }
     }
+    //Elimina campos del objeto indicado, con base a fields(cadena de campos separados por coma(,))
     DeleteFields::&record,fields
     {
         ref lf=split(fields,",")
@@ -45,6 +50,14 @@ module ""
             do field.remove(record,list.str(lf,i))
         }
     }
+    //Realiza el la inserción o actualización de la fila indicado con base al id, esta función es dinamica.
+    // db - conexión abierta de una base de datos
+    // row - registro con los campos a insertar o actualizar
+    // table - Nombre de la tabla donde se insertará o actualizar
+    // conditional - condición para actualizar la fila 
+    //id - identificar numerico para condicionar si es un insert o un update
+    //campo - campo para actualizar si conditional es vacío
+    //text - texto que se imprimirá despues de la inserción o actualización
     Importar.row::&db,&row,table,conditional,id,campo,text
     {
         _text=ifstr(trim(@@(row,"$"+campo))!="",@@(row,"$"+campo),text)
@@ -68,6 +81,11 @@ module ""
 
     @__delfields="sys_pk,sys_guid,sys_deleted"
     //Función global
+    //Inicio de la importación
+    //db - Referecia a una conexión a una base de datos
+    //data - Lista de datos
+    //table - nombre de la tabla
+    //funct_validate - puntero referenciado hacia una funcion o null 
     Importar.data::&db,&data,table,&funct_validate
     {
         for i = 0; i < @count(data)
@@ -145,6 +163,7 @@ module ""
         }
     }
     //Importar producto
+
     @__alias_columnas="marca:imarca,                    
                     linea:ilinea,                    
                     divisa:idivisa,                    
@@ -164,7 +183,7 @@ module ""
             producto<"uf_inhabilitado">:@@(producto,"#uf_inhabilitado")
 
             do DeleteFields(producto,@__delfields)
-            do DeleteFields(producto,"detalle,gruposproductos,variables,uf_solicitarcantidad")
+            do DeleteFields(producto,"existencia,uf_solicitarcantidad")
             //Campos requeridos que si no están establecidos se les asigna un valor predeterminado
             //Esta sección de código es ilustrativa y debería usarse únicamente como guía
             do set_default(producto, "linea","0001")
@@ -200,6 +219,11 @@ module ""
             if ret==2
             {
                 do dbr.execute(db,"update producto set sys_info=null where lower(codigo)=lower(@codigo)",producto)
+            }
+
+            exception
+            {
+                do PrintLog(" Error al insertar Producto: "+@@(producto,"$codigo")+": "+last_error())
             }
         }
     }
@@ -359,6 +383,50 @@ module ""
 
         if not(exist_table_adicional){do field.remove(row,"padicional")}
         do DeleteFields(row,"producto")
+        return res
+    }
+    #!
+    ValidateCprodProducto::&db,&data,&row,table,index
+    {
+        _text="Producto: "+@@(row,"$producto")+" Grupo: "+@@(row,"$grupo")
+
+        id_producto=obtener_clave(db,"producto","codigo",@@(row,"$producto"))
+        id_cproducion=obtener_clave(db,"cproduccion","codigo",@@(row,"$cproduccion"))
+
+        if id_producto < 1{do rise_error(99,"No se encontró el producto: "+@@(row,"$producto"))}
+        if id_cproducion < 1{do rise_error(99,"No se encontró el centro de producción: "+@@(row,"$cproduccion"))}
+
+        using row
+        {
+            @"iproductos":id_producto
+            @"icentrosproduccion":id_cproducion
+        }
+
+        pk_exist=dbr.num(db,"select sys_pk from cproduccion_producto_ where iproductos=@iproductos and icentrosproduccion=@icentrosproduccion",row)
+
+        new res
+        {
+            @"id":pk_exist
+            @"_text":_text
+        }
+        do DeleteFields(row,"producto,cproduccion")
+
+        if pk_exist > 0
+        {
+            res<"conditional">:"iproductos=@iproductos and icentrosproduccion=@icentrosproduccion"
+        }
+        else 
+        {
+            //realizamos la inserción ya que en la funcion default_r5_entity, devuelve el campo sys_dtcreated y la tabla de la entidad no la contiene
+            ref new_row:default_r5_entity()
+            do DeleteFields(new_row,"sys_dtcreated,sys_guid,sys_dtexported")
+            do CopyRecord(row,new_row)
+            do dbr.insert(db,table,row)
+            do PrintLog(" - "+table+" "+_text+" insertado")
+
+            res<"continue">:@true
+        }
+        
         return res
     }
 }

@@ -36,6 +36,15 @@ module "Consultas para la exportación"
     INNER JOIN cconsumo cc ON ccl.uf_icc=cc.sys_pk
     WHERE cc.ubicacion=@ubicacion"
 
+    @list_cproducion_productos="SELECT p.codigo producto,c.codigo cproduccion 
+    FROM cproduccion_producto_ cp
+    INNER JOIN producto p ON cp.iproductos=p.sys_pk
+    INNER JOIN cproduccion c ON cp.icentrosproduccion=c.sys_pk
+    INNER JOIN linea l ON p.ilinea=l.sys_pk
+    LEFT JOIN ut_cc_linea ccl ON l.sys_pk=ccl.uf_ilinea
+    LEFT JOIN cconsumo cc ON ccl.uf_icc=cc.sys_pk
+    WHERE if(IFNULL(@ubicacion,0)<1,TRUE,cc.ubicacion=@ubicacion);"
+
     @list_lineas="select l.sys_pk,l.sys_guid,l.clase,l.codigo,l.color,
     l.comision1,l.comision2,l.comision3,l.comision4,l.comision5,
     l.descripcion,l.notas,l.visible,l.uf_indicaciones,l.img_file from linea l"

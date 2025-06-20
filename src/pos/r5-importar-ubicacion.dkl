@@ -75,6 +75,7 @@ program ""
     ref ensambles=@("&ensambles")
     ref grupoproductos=@("&grupoproductos")
     ref variables=@("&variables")
+    ref cproducionproductos=@("&cproducionproductos")
 
     if isnull(ubicacion)
     {
@@ -198,6 +199,11 @@ program ""
     do PrintLog("====Importar recetas variables: "+str(@count(variables))+" ====")
     point @function_validate to ValidateVariables
     do Importar.data(db,variables,"ivariable",@function_validate)
+
+    do PrintLog("\n")
+    do PrintLog("====Importar productos - centro de produción : "+str(@count(cproducionproductos))+" ====")
+    point @function_validate to ValidateCprodProducto
+    do Importar.data(db,cproducionproductos,"cproduccion_producto_",@function_validate)
 
     do PrintLog("\n")
     do PrintLog("***** ===== Proceso terminado correctamente ===== *****")
