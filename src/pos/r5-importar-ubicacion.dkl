@@ -9,6 +9,8 @@ program ""
     #include "r5.lib.dk"
     #include "r5.dkh" //Funciones de interoperabilidad con versiones R5 de Induxsoft
     
+    @PathLog="C:/Users/Dev/Documents/devkrons/devkronNet/tools/log_importart/"
+    @hide_productos=@true
     //1.- Obetener los args
     ref args=commandline("=")
     if trim(@@(args,"$qn"))==""{do rise_error(99,"No ha indicado el parámetro 'qn' (Nombre cualificado a una conexión) ")}
@@ -16,6 +18,7 @@ program ""
     if trim(@@(args,"$uid"))==""{do rise_error(99,"No ha indicado el parámetro 'uid' (usuario)")}
     if trim(@@(args,"$pwd"))==""{do rise_error(99,"No ha indicado el parámetro 'pwd' (contraseña del usuario)")}
 
+    if trim(@@(args,"$log"))!=""{@PathLog=trim(@@(args,"$log"))}
     //variables globales
     @qname=trim(@@(args,"$qn"))
     @uri=trim(@@(args,"$uri"))
@@ -33,15 +36,16 @@ program ""
     {
         @"uid":@uid
         @"pwd":@pwd
+        @"ub":trim(@@(args,"$ub"))
     }
     
-    do print("====Realizando solicitud de datos====")
+    do PrintLog("***** ===== Realizando solicitud de datos ===== *****")
 
     res=http.request(@uri,"POST",h,to.json(data))
     ref result=from.json(res)
     if not(@@(result,"#success")){do rise_error(99,@@(result,"$message"))}
 
-    do print("====Datos obtenidos correctamente====")
+    do PrintLog("*****  ===== Datos obtenidos correctamente ==== ***** ")
 
     ref data=@@(result,"&data")
 
@@ -61,7 +65,7 @@ program ""
     ref cajas=@("&cajas")
     ref tipoclientes=@("&tipoclientes")
     ref clientes=@("&clientes")
-    // ref ubicacion=@("&ubicacion")
+    ref ubicacion=@("&ubicacion")
     
     ref lineas=@("&lineas")
     ref productos=@("&productos")
@@ -69,78 +73,140 @@ program ""
     ref productos_remplazos=@("&productos_remplazos")
     ref precios_x_cliente=@("&precios_x_cliente")
     ref ensambles=@("&ensambles")
+    ref grupoproductos=@("&grupoproductos")
+    ref variables=@("&variables")
 
-    do print("====Importar divisas: "+str(@count(divisas))+" ====")
-    // do Importar.data(db,divisas,"divisa",@null)
+    if isnull(ubicacion)
+    {
+        do PrintLog("***** ===== Todos los datos =====*****")
+    }
+    else 
+    {
+        do PrintLog("***** ===== Ubicación: "+@@(ubicacion,"$descripcion")+" =====*****")
+    }
 
-    do print("====Importar cajeros: "+str(@count(cajeros))+" ====")
-    // do Importar.data(db,cajeros,"cajero",@null)
+    do PrintLog("\n")
+    do PrintLog("***** ===== Inicio del proceso de importación ===== *****")
 
-    do print("====Importar agentes: "+str(@count(agentes))+" ====")
-    // do Importar.data(db,agentes,"agente",@null)
+    do PrintLog("\n")
+    do PrintLog("====Importar divisas: "+str(@count(divisas))+" ====")
+    do Importar.data(db,divisas,"divisa",@null)
 
-    do print("====Importar marcas: "+str(@count(marcas))+" ====")
-    // do Importar.data(db,marcas,"marca",@null)
+    do PrintLog("\n")
+    do PrintLog("====Importar cajeros: "+str(@count(cajeros))+" ====")
+    do Importar.data(db,cajeros,"cajero",@null)
 
-    do print("====Importar departamentos: "+str(@count(departamentos))+" ====")
-    // do Importar.data(db,departamentos,"departamento",@null)
+    do PrintLog("\n")
+    do PrintLog("====Importar agentes: "+str(@count(agentes))+" ====")
+    do Importar.data(db,agentes,"agente",@null)
 
-    do print("====Importar repartidores: "+str(@count(repartidores))+" ====")
-    // do Importar.data(db,repartidores,"repartidor",@null)
+    do PrintLog("\n")
+    do PrintLog("====Importar marcas: "+str(@count(marcas))+" ====")
+    do Importar.data(db,marcas,"marca",@null)
 
-    do print("====Importar almacenes: "+str(@count(almacenes))+" ====")
-    // do Importar.data(db,almacenes,"almacen",@null)
+    do PrintLog("\n")
+    do PrintLog("====Importar departamentos: "+str(@count(departamentos))+" ====")
+    do Importar.data(db,departamentos,"departamento",@null)
 
-    do print("====Importar configuración de impuestos: "+str(@count(cfgimpuestos))+" ====")
+    do PrintLog("\n")
+    do PrintLog("====Importar repartidores: "+str(@count(repartidores))+" ====")
+    do Importar.data(db,repartidores,"repartidor",@null)
+
+    do PrintLog("\n")
+    do PrintLog("====Importar almacenes: "+str(@count(almacenes))+" ====")
+    do Importar.data(db,almacenes,"almacen",@null)
+
+    do PrintLog("\n")
+    do PrintLog("====Importar configuración de impuestos: "+str(@count(cfgimpuestos))+" ====")
     point @function_validate to ValidateCfgImpueto
-    // do Importar.data(db,cfgimpuestos,"cfgimpuesto",@function_validate)
+    do Importar.data(db,cfgimpuestos,"cfgimpuesto",@function_validate)
 
-    do print("====Importar tipos de clientes: "+str(@count(tipoclientes))+" ====")
-    // do Importar.data(db,tipoclientes,"tipocliente",@null)
+    do PrintLog("\n")
+    do PrintLog("====Importar tipos de clientes: "+str(@count(tipoclientes))+" ====")
+    do Importar.data(db,tipoclientes,"tipocliente",@null)
 
-    do print("====Importar clientes: "+str(@count(clientes))+" ====")
+    do PrintLog("\n")
+    do PrintLog("====Importar clientes: "+str(@count(clientes))+" ====")
     point @function_validate to ValidateCliente
-    // do Importar.data(db,clientes,"cliente",@function_validate)
+    do Importar.data(db,clientes,"cliente",@function_validate)
 
-    do print("====Importar centro de consumos: "+str(@count(cconsumos))+" ====")
+    do PrintLog("\n")
+    do PrintLog("====Importar centro de consumos: "+str(@count(cconsumos))+" ====")
     point @function_validate to ValidateCConsumo
-    // do Importar.data(db,cconsumos,"cconsumo",@function_validate)
+    do Importar.data(db,cconsumos,"cconsumo",@function_validate)
 
-    do print("====Importar centro de producción: "+str(@count(cproduccion))+" ====")
+    do PrintLog("\n")
+    do PrintLog("====Importar centro de producción: "+str(@count(cproduccion))+" ====")
     point @function_validate to ValidateCProduccion
-    // do Importar.data(db,cproduccion,"cproduccion",@function_validate)
+    do Importar.data(db,cproduccion,"cproduccion",@function_validate)
 
-    do print("====Importar cajas: "+str(@count(cajas))+" ====")
-    // do Importar.data(db,cajas,"caja",@null)
+    do PrintLog("\n")
+    do PrintLog("====Importar cajas: "+str(@count(cajas))+" ====")
+    do Importar.data(db,cajas,"caja",@null)
 
     // //importar linea, pide una clase
-    do print("====Importar línea: "+str(@count(lineas))+" ====")
-    // do Importar.data(db,lineas,"linea",@null)
+    do PrintLog("\n")
+    do PrintLog("====Importar línea: "+str(@count(lineas))+" ====")
+    do Importar.data(db,lineas,"linea",@null)
 
-    // //importar producto
-    do print("====Importar productos: "+str(@count(productos))+" ====")
-    do Importar.producto(db,productos)
+
+    module "Importar productos, servicios,recetas"
+    {
+        if @hide_productos
+        {
+            do dbr.execute(db,"update producto set sys_info='v12import';",@null)
+        }
+        // //importar producto
+        do PrintLog("\n")
+        do PrintLog("====Importar productos: "+str(@count(productos))+" ====")
+        do Importar.producto(db,productos)
+        
+        do PrintLog("\n")
+        do PrintLog("====Importar productos de ensambles o recetas constantes: "+str(@count(productos_elementos))+" ====")
+        do Importar.producto(db,productos_elementos)
+
+        do PrintLog("\n")
+        do PrintLog("====Importar productos de ensambles y remplazos: "+str(@count(productos_remplazos))+" ====")
+        do Importar.producto(db,productos_remplazos)
+
+        //liberar productos
+        if @hide_productos
+        {
+            do dbr.execute(db,"update producto set visible=0 where sys_info='v12import';",@null)
+            // do dbr.execute(db,"update producto set sys_info=null where sys_info='v12import' ",@null)
+        }
+        
+    }
     
-    do print("====Importar productos de ensambles o recetas constantes: "+str(@count(productos_elementos))+" ====")
-    do Importar.producto(db,productos_elementos)
+    // //importar precio de venta
+    do PrintLog("\n")
+    do PrintLog("====Importar precio de venta por cliente: "+str(@count(precios_x_cliente))+" ====")
+    point @function_validate to ValidatePrecioVenta
+    do Importar.data(db,precios_x_cliente,"precioventa",@function_validate)
 
-    do print("====Importar productos de ensambles y remplazos: "+str(@count(productos_remplazos))+" ====")
-    do Importar.producto(db,productos_remplazos)
-
-    do print("====Importar ensambles o recetas constantes: "+str(@count(ensambles))+" ====")
+    do PrintLog("\n")
+    do PrintLog("====Importar ensambles o recetas constantes: "+str(@count(ensambles))+" ====")
     point @function_validate to ValidateEnsamble
     do Importar.data(db,ensambles,"iensamble",@function_validate)
 
-    // //importar precio de venta
-    // do print("====Importar precio de venta por cliente====")
-    // do Importar.precioventa(db,precios_x_cliente)
+    do PrintLog("\n")
+    do PrintLog("====Importar grupos de productos: "+str(@count(grupoproductos))+" ====")
+    point @function_validate to ValidateGrupoProducto
+    do Importar.data(db,grupoproductos,"grupoproductos",@function_validate)
 
-    // do print("====Proceso terminado correctamente====")
+    do PrintLog("\n")
+    do PrintLog("====Importar recetas variables: "+str(@count(variables))+" ====")
+    point @function_validate to ValidateVariables
+    do Importar.data(db,variables,"ivariable",@function_validate)
+
+    do PrintLog("\n")
+    do PrintLog("***** ===== Proceso terminado correctamente ===== *****")
+
     do @context.end()
     //control de exception general
     exception
     {
-        do print("Error: "+last_error())
+        do PrintLog("Error: "+last_error())
         if isset("db")
         {
             //si la bd esta abierta, realizar los siguiente.
@@ -153,4 +219,6 @@ program ""
             }
         }
     }
+
+    do SaveLog(@PathLog)
 }

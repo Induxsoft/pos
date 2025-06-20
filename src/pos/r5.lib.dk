@@ -2,6 +2,12 @@
 #!
 module ""
 {
+    TableExist::&db,table
+    {
+        table >> p
+        name_table=dbr.str(db,"SHOW TABLES LIKE '"+table+"';",p)
+        return trim(name_table)!=""
+    }
     Record_enum::&db,table,field,value
     {
         new p{}
@@ -39,23 +45,23 @@ module ""
             do field.remove(record,list.str(lf,i))
         }
     }
-    Importar.row::&db,&row,table,campo,value,conditional,id
+    Importar.row::&db,&row,table,conditional,id,campo,text
     {
-        _text=ifstr(trim(@@(row,"$"+campo))!="",@@(row,"$"+campo),str(id))
-        
+        _text=ifstr(trim(@@(row,"$"+campo))!="",@@(row,"$"+campo),text)
+
         if id < 1
         {
             ref new_row:default_r5_entity()
             do CopyRecord(row,new_row)
             do dbr.insert(db,table,row)
-            do print(" - "+table+" "+_text+" insertado")
+            do PrintLog(" - "+table+" "+_text+" insertado")
         }
         else 
         {
             conditional=ifstr(trim(conditional)!="",conditional,"#<campo>=@#<campo>")
 
             do dbr.update(db,table,row,ftext(conditional),row)
-            do print(" - "+table+" "+_text+" actualizado")
+            do PrintLog(" - "+table+" "+_text+" actualizado")
         }
     }
  
@@ -70,29 +76,32 @@ module ""
             //prevenir campos de sistema
             do DeleteFieldsByTable(_dt,table)
             
-            campo="codigo"
-            ref res=record.create()
+            new res
+            {
+                @"_field":"codigo"
+                @"_text":@@(_dt,"$codigo")
+            }
             //ejecutar función si no es nulo
             if not(isnull(funct_validate))
             {
-                that funct_validate(db,data,_dt,table,i)->*res
-                if @@(res,"$_field")!=""{campo=@@(res,"$_field")}
+                that funct_validate(db,data,_dt,table,i)->*result
+                if not(isnull(result)){ref res=result}
             }
             //verificar el id, si no existe buscarlo mediante el campo indicado
             if not(field.exist(res,"id"))
             {
-                res<"id">:obtener_clave(db,table,campo,@@(_dt,"$"+campo))
+                res<"id">:obtener_clave(db,table,@@(res,"$_field"),@@(_dt,"$"+@@(res,"$_field")))
             }
             //si continue es true no se realiza la importación
             if not(parse.bool(@@(res,"continue")))
             {
                 //insertar o actualizar fila
-                do Importar.row(db,_dt,table,campo,@@(_dt,"$"+campo),@@(res,"$conditional"),@@(res,"#id"))
+                do Importar.row(db,_dt,table,@@(res,"$conditional"),@@(res,"#id"),@@(res,"$_field"),@@(res,"$_text"))
             }
 
             exception
             {
-                do print("Error a importar "+table+": "+last_error())
+                do PrintLog("Error a importar "+table+": "+last_error())
             }
         }
     }
@@ -146,13 +155,14 @@ module ""
     Importar.producto::&db,&productos
     {
         if isnull(productos) || @count(productos)< 1{return}
-        //Alias conocidos de columnas de la tabla producto
-        ref ldetalle=list.create()
+        
         //Insertar productos
         for i = 0; i < @count(productos)
         {
             ref producto=@item(productos,i)
             
+            producto<"uf_inhabilitado">:@@(producto,"#uf_inhabilitado")
+
             do DeleteFields(producto,@__delfields)
             do DeleteFields(producto,"detalle,gruposproductos,variables,uf_solicitarcantidad")
             //Campos requeridos que si no están establecidos se les asigna un valor predeterminado
@@ -184,46 +194,16 @@ module ""
             ref producto:record.copyexin(producto,@null,"*","",@__alias_columnas,":")
             
             ///////////////////////////////////////////////////////////////////////////////////////
-
             //Inserta o actualiza con base en el código
-            do print_actualizar_producto(db, producto)
-        }
-    }
-
-    Importar.precioventa::&db,&data
-    {
-        for i = 0; i < @count(data)
-        {
-            ref _dt=@item(data,i)
-            id_producto=obtener_clave(db,"producto","codigo",@@(_dt,"$producto"))
-            id_cliente=obtener_clave(db,"cliente","codigo",@@(_dt,"$cliente"))
-
-            id_producto,id_cliente >> _dt
-
-            pk_exist=dbr.num(db,"select sys_pk from precioventa where producto=@producto and fk_cliente_listaprecios=@fk_cliente_listaprecios",_dt)
+            ret=Print_actualizar_producto(db, producto)
             
-            if pk_exist > 0
+            if ret==2
             {
-                pk_exist >> p
-                ref precio_venta=record.copy(_dt,"precio,limite")
-                do dbr.update(db,"precioventa",precio_venta,"sys_pk=@pk",p)
-                do print(" ** Precioventa, cliente: "+@@(_dt,"$producto")+" producto: "+@@(_dt,"$cliente")+" actualizado")
-            }
-            else 
-            {
-                ref precio_venta:default_r5_entity()
-                using precio_venta
-                {
-                    @"precio":@@(_dt,"#precio")
-                    @"limite":@@(_dt,"#limite")
-                    @"producto":id_producto
-                    @"fk_cliente_listaprecios":id_cliente
-                }
-                do dbr.insert(db,"precioventa",precioventa)
-                do print(" ** Precioventa, cliente: "+@@(_dt,"$producto")+" producto: "+@@(_dt,"$cliente")+" insertado")
+                do dbr.execute(db,"update producto set sys_info=null where lower(codigo)=lower(@codigo)",producto)
             }
         }
     }
+
     //funciones de validaciones
     ValidateCfgImpueto::&db,&data,&row,table,index
     {
@@ -297,6 +277,88 @@ module ""
             res<"conditional">:"elemento=@elemento and fk_producto_elementos=@fk_producto_elementos"
         }
         do field.remove(row,"producto")
+        return res
+    }
+    ValidatePrecioVenta::&db,&data,&row,table,index
+    {
+        _text="cliente: "+@@(row,"$cliente")+" producto: "+@@(row,"$producto")
+        
+        id_producto=obtener_clave(db,"producto","codigo",@@(row,"$producto"))
+        id_cliente=obtener_clave(db,"cliente","codigo",@@(row,"$cliente"))
+        
+        if id_producto < 0{do rise_error(99,"No se encontró el producto: "+@@(row,"$producto"))}
+        if id_cliente < 0{do rise_error(99,"No se encontró el cliente: "+@@(row,"$cliente"))}
+
+        id_producto,id_cliente >> _dt
+
+        pk_exist=dbr.num(db,"select sys_pk from precioventa where producto=@producto and fk_cliente_listaprecios=@fk_cliente_listaprecios",_dt)
+
+        using row
+        {
+            @"producto":id_producto
+            @"fk_cliente_listaprecios":id_cliente
+            
+        }
+        new res
+        {
+            @"_field":_text
+            @"id":pk_exist
+            @"_text":_text
+        }
+
+        if pk_exist > 0
+        {
+            res<"conditional">:"producto=@producto and fk_cliente_listaprecios=@fk_cliente_listaprecios"
+        }
+        do DeleteFields(row,"cliente")
+        return res
+    }
+    #!
+    ValidateGrupoProducto::&db,&data,&row,table,index
+    {
+        new res
+        {
+            @"_field":"nombre"
+        }
+
+        return res
+    }
+    #!
+    ValidateVariables::&db,&data,&row,table,index
+    {
+        _text="Producto: "+@@(row,"$producto")+" Grupo: "+@@(row,"$grupo")
+
+        id_producto=obtener_clave(db,"producto","codigo",@@(row,"$producto"))
+        id_grupo=obtener_clave(db,"grupoproductos","nombre",@@(row,"$grupo"))
+
+        if id_producto < 1{do rise_error(99,"No se encontró el producto: "+@@(row,"$producto"))}
+        if id_grupo < 1{do rise_error(99,"No se encontró el grupo: "+@@(row,"$grupo"))}
+        
+        exist_table_adicional=TableExist(db,"cimpadicionales")
+        if exist_table_adicional
+        {
+            do Record_enum_explicit(db,row, "padicional","cimpadicionales","const","#id") 
+            if @@(row,"#padicional") < 0{do rise_error(99,"No se encontró el adicional: "+@@(row,"$padicional"))}
+        }
+        using row
+        {
+            @"grupo":id_grupo
+            @"fk_producto_ivariables":id_producto
+        }
+        pk_exist=dbr.num(db,"select sys_pk from ivariable where grupo=@grupo and fk_producto_ivariables=@fk_producto_ivariables",row)
+
+        new res
+        {
+            @"id":pk_exist
+            @"_text":_text
+        }
+        if pk_exist > 0
+        {
+            res<"conditional">:"grupo=@grupo and fk_producto_ivariables=@fk_producto_ivariables"
+        }
+
+        if not(exist_table_adicional){do field.remove(row,"padicional")}
+        do DeleteFields(row,"producto")
         return res
     }
 }

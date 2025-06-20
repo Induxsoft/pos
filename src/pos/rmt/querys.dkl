@@ -11,7 +11,7 @@ module "Consultas para la exportación"
     // AND COLUMN_NAME NOT LIKE 'sys_%'
 
     @_system_fileds="sys_pk,sys_guid"
-    @list_ubicaciones="select #<@_system_fileds>,codigo,descripcion,notas from ubicacion where codigo=@_entiy_id"
+    @list_ubicaciones="select sys_pk ubicacion,codigo,descripcion,notas from ubicacion where codigo=@_entiy_id"
 
     @list_cconsumo="select cc.sys_pk,cc.sys_guid,
         cc.codigo,cc.descripcion,cc.notas,cc.precio,a.codigo almacen,
@@ -45,18 +45,25 @@ module "Consultas para la exportación"
     
     @__conditional_prod="cc.ubicacion=@ubicacion;"
 
-    @list_productos_rel="SELECT p.sys_pk,p.sys_guid,
-    p.adicional,p.cdirecto,p.cindirecto,p.cmanoobra,p.cmaquinaria,p.codbar1,p.codbar2,p.codbar3,p.codigo,
-    p.color,p.comision,p.comision1,p.comision2,p.comision3,p.comision4,p.comision5,p.costopromedio,p.costoultimo,
-    p.data1,p.data2,p.data3,p.desc2,p.desc3,p.desc4,p.desc5,p.descripcion,p.diasentrega,p.existencia,p.factorb,
-    p.factorc,p.factord,p.factore,p.flaglimites,p.flagutilidad,p.formacomision,p.iclase,p.itipo,p.lim2,p.lim3,
-    p.lim4,p.lim5,p.maximo,p.metodovaluacion,p.minimo,p.notas,p.padic1,p.padic2,p.padic3,p.padic4,p.padic5,
-    p.ppuntos,p.precio1,p.precio2,p.precio3,p.precio4,p.precio5,p.puntoro,p.reqlote,p.reqserie,p.saldo,
-    p.tipocomision,p.unidad,p.unidadb,p.unidadc,p.unidadd,p.unidade,p.util1,p.util2,p.util3,p.util4,p.util5,
-    p.utilmin,p.vinculardata,p.visible,
-    p.ivariables,p.uf_solicitarcantidad,
-    p.uf_sys_baja,p.uf_complemento,p.precio106,p.precio107,
-    p.precio108,p.precio109,p.precio110,p.precio111,p.precio112,p.precio113,
+    @list_productos_rel="SELECT p.adicional,p.cdirecto,p.cindirecto,p.cmanoobra,p.cmaquinaria,p.codbar1,p.codbar2,p.codbar3,
+    p.codigo,p.color,p.comision,p.comision1,p.comision2,p.comision3,p.comision4,p.comision5,
+    p.costopromedio,p.costoultimo,p.data1,p.data2,p.data3,p.desc2,p.desc3,p.desc4,p.desc5,
+    p.descripcion,p.diasentrega,p.existencia,p.factorb,p.factorc,p.factord,p.factore,
+    p.flaglimites,p.flagutilidad,p.formacomision,p.iclase,p.itipo,p.lim2,p.lim3,
+    p.lim4,p.lim5,p.maximo,p.metodovaluacion,p.minimo,p.notas,p.padic1,p.padic2,
+    p.padic3,p.padic4,p.padic5,p.ppuntos,p.precio1,p.precio2,p.precio3,p.precio4,
+    p.precio5,p.puntoro,p.reqlote,p.reqserie,p.saldo,p.tipocomision,p.unidad,
+    p.unidadb,p.unidadc,p.unidadd,p.unidade,p.util1,p.util2,p.util3,p.util4,
+    p.util5,p.utilmin,p.vinculardata,p.visible,p.idepartamento,p.idivisa,p.ilinea,
+    p.imarca,p.impuestos,p.ivariables,p.proveedor1,p.proveedor2,p.proveedor3,p.uf_solicitarcantidad,
+    p.uf_sys_baja,p.uf_complemento,p.precio106,p.precio107,p.precio108,p.precio109,p.precio110,
+    p.precio111,p.precio112,p.precio113,p.precio114,p.precio115,p.precio116,p.precio117,p.precio118,
+    p.precio119,p.precio120,p.util106,p.util107,p.util108,p.util109,p.util110,p.util111,p.util112,
+    p.util113,p.util114,p.util115,p.util116,p.util117,p.util118,p.util119,p.util120,
+    p.uf_codigoparaproveedor1,p.uf_codigoparaproveedor2,p.uf_codigoparaproveedor3,
+    p.uf_pdv,p.uf_dv_diasreorden,p.uf_dv_inventarioseguridaddias,p.uf_gruposimilares,
+    p.uf_inhabilitado,p.uf_fechainhabilitacion,
+    p.uf_sat_proser,p.uf_sat_uniproser,
     l.codigo linea,
     dp.codigo departamento,
     d.codigo divisa,
@@ -154,7 +161,7 @@ module "Consultas para la exportación"
     INNER JOIN producto p ON iv.fk_producto_ivariables=p.sys_pk
     LEFT JOIN grupoproductos_cconsumo_ gpcc ON gp.sys_pk=gpcc.igrupoproducto
     LEFT JOIN cconsumo cc ON gpcc.iconsumo=cc.sys_pk
-    WHERE iv.fk_producto_ivariables=@producto and if(IFNULL(@ubicacion,0)=0,TRUE,cc.ubicacion=@ubicacion)"
+    WHERE if(IFNULL(@ubicacion,0)=0,TRUE,cc.ubicacion=@ubicacion)"
 
     @list_gruposproductos="SELECT gp.sys_pk,gp.comision1,
     gp.comision2,gp.comision3,

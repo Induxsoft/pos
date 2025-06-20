@@ -14,8 +14,10 @@ module ""
     list::&db,&params
     {
         do dbr.apps.action.grant("VP50")
-
+        if trim(@@(params,"$ub"))!=""{params<"_entiy_id">:trim(@@(params,"$ub"))}
+        
         ref entity= dbr.rec(db,ftext(@list_ubicaciones),params)
+        
         ref cconsumos=dbr.list(db,ftext(@list_cconsumo),entity)
         ref cproducciones=dbr.list(db,ftext(@list_cproducion),entity)
         ref lineas=dbr.list(db,ftext(@list_lineas_rel),entity)
@@ -65,7 +67,7 @@ module ""
                 @"variables*":dbr.list(db,ftext(@list_variables),entity)
             }
         }
-        
+
         if get_prod_elements
         {
             if TableExist(db,"iensamble")
