@@ -114,4 +114,15 @@ model "erp.pos"
         @"descripcion" string(25) unique required
         @"uf_porcomision" decimal(18,8) 
     }
+    
+    entity "pos_datapack" : "TableModel"
+    {
+        //sys_timestamp es la fecha y hora de la última vez que se envió para procesarse
+        @"id" string(32) unique required // Es el identificador del paquete definido por la sucursal (R5)
+        @"location_id" string(43) required //Es el identificador de la ubicación (sucursal) que remite el paquete
+        @"processed" bool 		// Es true en ambas cuando ha sido correctamente procesado
+        @"error" memo			// Mensaje del último error
+        @"las_error" datetime	// Fecha y hora en que ocurrió el último error
+        @"sended" bool 			// Es true en la base de datos local (satélite)
+    }
 }

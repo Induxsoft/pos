@@ -1,0 +1,218 @@
+#include "dkli.dkh"    
+#!
+module "ftt.export"
+{
+    //Devuelve un nuevo registro con la unión de params y row agregando prefix a los campos de row
+    #!
+    dbr.ftt.merge_params:: &params, prefix, &row
+    {
+        if isnull(params) { new rec {} }
+        else {  ref rec=record.copy(params,"*") }
+
+        ref l=list.create_from_fields(row)
+
+        for i=0;i<list.count(l)
+        {
+            rec<prefix+list.str(l,i)+"*">:field.obj(row,list.str(l,i))
+        }
+
+        return rec
+    }
+
+    #!
+    dbr.ftt.export.trans:: &db,type, &trans, &params
+    {
+
+        ref params=from.json(to.json(params)) // Evitar problemas de conversión de tipos
+
+        ref t=dbr.table(db,field.str(trans,"source"),params)
+
+        new data
+        {
+            @"type": type
+            @"rows*": list.create()
+        }
+
+        for j=0;j<table.rows(t)
+        {
+            
+            ref row=row.get(t,j)
+            ref childs_list=list.create()
+            ref p_row=dbr.ftt.merge_params(params,field.dstr(trans,"parameters_prefix",""),row)
+
+            // on_begin
+            if field.dstr(trans,"on_begin","")!="" { do dbr.execute(db,field.str(trans,"on_begin"),p_row) }
+
+            if field.exist(trans,"childs")
+            {
+                ref childs=field.obj(trans,"childs")
+                ref l=list.create_from_fields(childs)
+                
+                for i=0;i<list.count(l)
+                {
+                    do list.add(childs_list,  dbr.ftt.export.trans(db,list.str(l,i), field.obj(childs,list.str(l,i)),p_row))
+                }
+            }
+
+            
+            new data_row
+            {
+                @"data*":row
+            }
+
+            if list.count(childs_list)>0 { data_row<"childs*">:childs_list }
+
+            do list.add(field.obj(data,"rows"),data_row)
+
+            // on_complete
+            if field.dstr(trans,"on_complete","")!="" { do dbr.execute(db,field.str(trans,"on_complete"),p_row) }
+
+        }
+
+        return data
+    }
+
+    #!
+    dbr.ftt.export :: &db, &config
+    {
+        ref l=list.create_from_fields(config)
+
+        new result
+        {
+            @"uuid":uuid()
+            @"timestamp": date_str(now(),"yyyy-MM-ddThh:mm:ss")
+        }
+
+        ref transactions=list.create()
+
+        for i=0;i<list.count(l)
+        {
+            do list.add(transactions, dbr.ftt.export.trans(db,list.str(l,i), field.obj(config,list.str(l,i)),@null))
+        }
+
+        result<"transactions*">:transactions
+
+        return result
+    }
+
+    #!
+    dbr.ftt.remove_fields:: &rec, flds
+    {
+        if trim(flds)=="" {return }
+
+        ref l=split(flds,",")
+
+        for i=0;i<list.count(l)
+        {
+            if trim(list.str(l,i))!=""
+            {
+                if field.exist(rec, trim(list.str(l,i))) 
+                { 
+                    do field.remove(rec,trim(list.str(l,i))) 
+                }
+            }
+        }
+    }
+
+    #!
+    dbr.ftt.import.trans:: &db, &trans,&config
+    {
+        if isnull(config){ return }
+        if trim(field.dstr(config,"identity",""))=="" { return }
+
+        if trim(field.dstr(config,"target",""))=="" { do rise_error(-99,"No se ha indicado el nombre de la tabla de destino en el atributo 'target'") }
+
+        ref rows=field.obj(trans,"rows")
+
+        for i=0;i<list.count(rows)
+        {
+            ref row_data=list.obj(rows,i)
+            ref row_rec=field.obj(row_data,"data")
+
+            if parse.bool(field.dstr(config,"case_insensitive","true")) { ref row_rec=record.caseinsensitive(row_rec) }
+
+           //Campos de consulta
+            if field.exist(config,"queryfields")
+            {
+                ref dic_qf=field.obj(config,"queryfields")
+                ref lqf=list.create_from_fields(dic_qf)
+                for x=0;x<list.count(lqf)
+                {
+                    ref obj=dbr.scalar(db,field.str(dic_qf,list.str(lqf,x)),row_rec)
+                    row_rec<list.str(lqf,x)+"*">: obj
+                }
+
+                ref row_rec=from.json(to.json(row_rec)) //Asegurar conversión de tipos
+                if parse.bool(field.dstr(config,"case_insensitive","true")) { ref row_rec=record.caseinsensitive(row_rec) }
+            }
+
+            do dbr.ftt.remove_fields(row_rec, field.dstr(config,"exclude",""))
+
+            // before
+            if field.dstr(config,"before","")!="" { do dbr.execute(db,field.str(config,"before"),row_rec) }
+            
+            if isnull(dbr.rec(db,"select * from "+field.str(config,"target")+" where "+field.str(config,"identity"),row_rec))
+            {
+                if trim(field.dstr(config,"insert","*"))!="*" && trim(field.dstr(config,"insert","*"))!=""
+                {
+                    ref row_rec=field.copy(row_rec,field.str(config,"insert"))
+                }
+
+                // Insertar
+                do dbr.insert(db, field.str(config,"target"),row_rec)
+                
+                if field.dstr(config,"on_insert","")!="" { do dbr.execute(db,field.str(config,"on_insert"),row_rec) }
+            }
+            else
+            {
+                // Actualizar
+                if trim(field.dstr(config,"update","*"))!="*" && trim(field.dstr(config,"update","*"))!=""
+                {
+                    ref row_rec=field.copy(row_rec,field.str(config,"update"))
+                }
+
+                do dbr.update(db, field.str(config,"target"),row_rec,field.str(config,"identity"),row_rec)
+                if field.dstr(config,"on_update","")!="" { do dbr.execute(db,field.str(config,"on_update"),row_rec) }
+            }
+
+            if field.exist(row_data,"childs")
+            {
+                ref childs=field.obj(row_data,"childs")
+                if not(isnull(field.dobj(config,"childs",@null)))
+                {
+                    for j=0;j<list.count(childs)
+                    {
+                        ref child=list.obj(childs,j)
+                        do dbr.ftt.import.trans(db, child, field.dobj(config,"childs/"+field.str(child,"type"),@null))
+                    }
+                }
+            }
+
+            // after
+            if field.dstr(config,"after","")!="" { do dbr.execute(db,field.str(config,"after"),row_rec) }
+            
+            exception
+            {
+                msg=last_error()
+                msg="Destino: "+field.dstr(config,"target","") + " fila: "+str(i)+" mensaje: " + msg
+
+                do rise_error(-99,msg)
+            }
+        }
+
+
+    }
+
+    #!
+    dbr.ftt.import :: &db, &data, &config
+    {
+        ref trans=field.obj(data,"transactions")
+
+        for i=0;i<list.count(trans)
+        {
+            ref tr=list.obj(trans,i)
+
+            do dbr.ftt.import.trans(db,tr ,field.dobj(config,field.str(tr,"type"),@null))
+        }      
+    }
+}

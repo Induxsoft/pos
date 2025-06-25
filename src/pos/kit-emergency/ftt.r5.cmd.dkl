@@ -1,0 +1,39 @@
+﻿#include "dkli.dkh"
+
+#!
+module "fft.r5.cmd"
+{
+
+    ref cmd_args=commandline("=")
+
+    if not(field.exist(cmd_args,"dbqn"))
+    {
+        do print("No se ha indicado el nombre cualificado de una conexión a bases de datos")
+        return
+    }
+
+    if field.exist(cmd_args,"outfile") && (field.exist(cmd_args,"srcfile") || field.exist(cmd_args,"outpath") || field.exist(cmd_args,"ext"))
+    {
+        do print("Cuando se indica outfile no se requieren los argumentos 'srcfile' 'outpath' o 'ext'")
+        return
+    }
+
+    if field.exist(cmd_args,"srcfile") && (field.exist(cmd_args,"outfile") || field.exist(cmd_args,"outpath") || field.exist(cmd_args,"ext"))
+    {
+        do print("Cuando se indica srcfile no se requieren los argumentos 'outfile' 'outpath' o 'ext'")
+        return
+    }
+
+    if field.exist(cmd_args,"outpath") && (field.exist(cmd_args,"srcfile") || field.exist(cmd_args,"outfile"))
+    {
+        do print("Cuando se indica outpath no se requieren los argumentos 'srcfile' u 'outfile'")
+        return
+    }
+
+    if not(field.exist(cmd_args,"outfile")) && not(field.exist(cmd_args,"outpath")) && not(field.exist(cmd_args,"srcfile"))
+    {
+        do print ("Faltan parámetros en la línea de comando")
+        return
+    }
+
+}

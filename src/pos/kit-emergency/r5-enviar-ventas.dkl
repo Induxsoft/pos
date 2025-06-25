@@ -1,0 +1,56 @@
+#include "dkli.dkh"
+#!
+program ""
+{
+    #include "functions.dkh"
+    #include "serialize.dkh"
+    #include "webcl.dkh"
+    #include "r5.lib.dk"
+
+
+    //1.- Obetener los args
+    ref args=commandline("=")
+    if trim(@@(args,"$qn"))==""{do rise_error(99,"No ha indicado el parámetro 'qn' (Nombre cualificado a una conexión) ")}
+    if trim(@@(args,"$uri"))==""{do rise_error(99,"No ha indicado el parámetro 'url' (URL del servicio) ")}
+    if trim(@@(args,"$uid"))==""{do rise_error(99,"No ha indicado el parámetro 'uid' (usuario)")}
+    if trim(@@(args,"$pwd"))==""{do rise_error(99,"No ha indicado el parámetro 'pwd' (contraseña del usuario)")}
+
+    //variables globales
+    @qname=trim(@@(args,"$qn"))
+    @uid=trim(@@(args,"$uid"))
+    @pwd=trim(@@(args,"$pwd"))
+    
+    @r5.url.service=trim(@@(args,"$uri"))
+    ref db=dbr.open(@qname)
+    //1.- realizar petición al servicio con transaciones pendientes
+    do SendDataServicePending(db,args)
+
+    //2.- Generar nuevas atransaciones
+    new transacion
+    {
+        // @"id":uuid()
+        @"ubicacion":trim(@@(args,"$ub"))
+    }
+    do GenTransAndRegister(db,@qname,transacion)
+
+    //3.- enviar transaciones nuevas
+    do SendDataServicePending(db,args)
+    
+    if dbr.is_open(db){do dbr.close(db)}
+
+    exception
+    {
+        do print("**** Error: "+ last_error())
+        if isset("db")
+        {
+            //si la bd esta abierta, realizar los siguiente.
+            if dbr.is_open(db)
+            {
+                //si la bd esta en transacción, deshacer todo
+                if  dbr.in_transaction(db){do dbr.rollback(db)}
+                //cerrar base de datos
+                do dbr.close(db)
+            }
+        }
+    }
+}

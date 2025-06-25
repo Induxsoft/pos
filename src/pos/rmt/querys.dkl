@@ -161,6 +161,8 @@ module "Consultas para la exportación"
 
     @list_divisas="select #<@_system_fileds>,codigo,descripcion,tcambio,decimales from divisa"
 
+    //Para poder exportar variables y grupos de productos con base a una ubicacion dada
+    // tiene que estar vinculada grupos con centro de consumo
     @list_variables="SELECT iv.sys_pk,iv.cdirectoprom,iv.cindirectoprom,
     iv.cmanoobraprom,iv.cmaquinariaprom,iv.descripcion,
     iv.`factor`,iv.maximo,iv.minimo,ad.const padicional,gp.nombre grupo,p.codigo producto 

@@ -1,0 +1,132 @@
+#include "dkli.dkh"
+
+#!
+
+    program "ejemplo-exportar ftt"
+    {
+    #include "functions.dkh"
+    #include "dbr.dkh"
+    #include "serialize.dkh"
+    #include "dbr.ftt.dkl"
+    #include "ftt.r5.cmd.dkl"
+
+        if not(field.exist(cmd_args,"outfile") || field.exist(cmd_args,"outpath"))
+        {
+            do print("Parámetros insuficientes")
+            return
+        }
+
+        new config_export 
+        {
+       
+            
+                 member @"corte"
+                {
+                @"source":"select DATE_FORMAT(co.Sys_TimeStamp,'%Y-%m-%d %H:%i') as Sys_TimeStamp,co.sys_guid,co.cerrado,DATE_FORMAT(co.FApertura,'%Y-%m-%d %H:%i') as FApertura,
+                DATE_FORMAT(co.FCierre,'%Y-%m-%d %H:%i') as FCierre,DATE_FORMAT(co.HAPertura,'%Y-%m-%d %H:%i') as HAPertura,DATE_FORMAT(co.HCierre,'%Y-%m-%d %H:%i') as HCierre,ca.codigo as icaja,
+                 cj.codigo as icajero
+                 from corte co 
+                 inner join caja ca on co.icaja=ca.sys_pk
+                  inner join cajero cj on co.icajero=cj.sys_pk
+                   where not ifnull(co.sys_exported,0) or co.sys_dtexported<co.sys_timestamp order by co.sys_pk limit 50;"                  // Consula SQL de datos REQUERIDO
+                //@"on_begin":"update, insert o delete"   // Consulta SQL que se ejecutará por cada fila de 'source' antes de generar el JSON (OPCIONAL)
+                 @"parameters_prefix":""                 // Prefijo usado para nombrar como parámetros los campos de 'source' en las subconsultas (OPCIONAL)
+                 @"on_complete":"update corte set sys_dtexported=now(), sys_exported=1 where sys_guid=@sys_guid;"// Consulta SQL que se ejecutará por cada fila de 'source' (OPCIONAL) después de generar el JSON
+
+                } //corte
+
+             member @"foliosdocumentos"
+                {
+                    @"source":"select concat(bk.documento,'-',bk.serie) as Block,DATE_FORMAT(f.Sys_TimeStamp,'%Y-%m-%d %H:%i') as Sys_TimeStamp,f.Sys_GUID,DATE_FORMAT(f.Sys_DTCreated,'%Y-%m-%d %H:%i') as Sys_DTCreated,
+                    f.Sys_Exported,DATE_FORMAT(f.Sys_DTExported,'%Y-%m-%d %H:%i') as Sys_DTExported,f.Cancelado,
+                    DATE_FORMAT(f.Fecha,'%Y-%m-%d %H:%i') as Fecha,f.Folio 
+                    from foliosdocumentos f 
+                    inner join blockdocumentos bk on f.block=bk.sys_pk
+                    inner join venta v on f.Sys_pk=v.IFolio
+                    where not ifnull(f.sys_exported,0) or f.sys_dtexported<f.sys_timestamp order by f.sys_pk;"                  // Consula SQL de datos REQUERIDO
+                    //@"on_begin":"update, insert o delete"   // Consulta SQL que se ejecutará por cada fila de 'source' antes de generar el JSON (OPCIONAL)
+                    @"parameters_prefix":""                 // Prefijo usado para nombrar como parámetros los campos de 'source' en las subconsultas (OPCIONAL)
+                    @"on_complete":"update foliosdocumentos set sys_dtexported=now(), sys_exported=1 where sys_guid=@sys_guid;"// Consulta SQL que se ejecutará por cada fila de 'source' (OPCIONAL) después de generar el JSON
+                
+                    member @"childs"  //Especifica las subconsultas de origen para las transacciones incluidas por cada fila de 'source'
+                    {
+                         member "Venta"
+                        {
+                            //Los mismos miembros de "nombre_transacción" están disponibles
+                            @"source":"Select c.Codigo as ICliente,f.sys_guid as IFolio,cc.Codigo as ICConsumo,ag.Codigo as IAgente,cj.Codigo as ICaja,dv.Codigo as IDivisa,mc.sys_guid as IMovcaja,
+                            pt.Codigo as IPorteador,rp.Codigo as IRepartidor,co.sys_guid as ICorte,DATE_FORMAT(v.Sys_TimeStamp,'%Y-%m-%d %H:%i') as Sys_Timestamp,
+                            v.Sys_GUID,DATE_FORMAT(v.Sys_DTCreated,'%Y-%m-%d %H:%i') as Sys_DTCreated,DATE_FORMAT(v.Sys_DTExported,'%Y-%m-%d %H:%i') as Sys_DTExported,
+                            v.Auditado,v.Contabilizado,v.Descuento1,v.Descuento2,v.dmnsMesa,v.dmnsNota,v.dmnsPersonas,v.Documento,v.DomicilioEntrega,DATE_FORMAT(v.Fecha,'%Y-%m-%d %H:%i') as Fecha,
+                            DATE_FORMAT(v.FEmbarque,'%Y-%m-%d %H:%i') as FEmbarque,DATE_FORMAT(v.FEntrega,'%Y-%m-%d %H:%i') as FEntrega,DATE_FORMAT(v.FLiquidacion,'%Y-%m-%d %H:%i') as FLiquidacion,v.FormaPago,
+                            DATE_FORMAT(v.FUltimoCobro,'%Y-%m-%d %H:%i') as FUltimoCobro,v.ImporteAdicional,v.Impuesto1,v.Impuesto2,v.Impuesto3,v.Impuesto4,v.Notas,v.Partida,v.PComision,v.Poliza,v.Referencia,
+                            v.StatusAdministrativo,v.StatusEntrega,v.StatusFacturacion,v.StatusFinanciero,v.Subtotal,v.TipoCambio,v.txtGuia,DATE_FORMAT(v.Vencimiento,'%Y-%m-%d %H:%i') as Vencimiento,
+                            if(v.aplicadoa is null,null,v.sys_guid) as AplicadoA,
+                            v.IGuia,v.uf_Color,v.sys_recver,v.sys_deleted,v.sys_lock,DATE_FORMAT(v.uf_FechaCFD,'%Y-%m-%d %H:%i') as uf_FechaCFD,DATE_FORMAT(v.uf_Fechacancelacion,'%Y-%m-%d %H:%i') as uf_Fechacancelacion,
+                            v.uf_dmTipoFormato,v.XMLFormaPago,v.XMLCondicionesPago,v.XMLMetodoPago,v.XMLNumeroCuentaPago 
+                            from FoliosDocumentos f 
+                            inner join blockdocumentos bk on f.block=bk.sys_pk 
+                            inner join venta v on f.Sys_pk=v.IFolio 
+                            inner join cliente c on v.icliente=c.sys_pk 
+                            inner join cconsumo cc on v.icconsumo=cc.sys_pk 
+                            left join Corte co on v.icorte=co.sys_pk 
+                            left join agente ag on v.iagente=ag.sys_pk 
+                            left join caja cj on v.ICaja=cj.sys_pk 
+                            inner join Divisa dv on v.IDivisa=dv.sys_pk 
+                            left join movcaja mc on v.IMovcaja=mc.sys_pk 
+                            left join porteador pt on v.IPorteador=pt.sys_pk 
+                            left join Repartidor rp on v.IRepartidor=rp.Sys_pk where f.sys_guid=@sys_guid;" 
+                            @"on_complete":"update venta set sys_dtexported=now(), sys_exported=1 where sys_guid=@sys_guid;"
+                            member @"childs"
+                            {
+                                member "DVenta"
+                                {
+                                 //Los mismos miembros de "nombre_transacción" están disponibles
+                                  @"source":"select v.sys_guid as FK_Venta_Detalle,pr.Codigo as IProducto,a.Codigo As IAlmacen,DATE_FORMAT(dv.Sys_TimeStamp,'%Y-%m-%d %H:%i') as Sys_TimeStamp,dv.Sys_GUID,
+                                  DATE_FORMAT(dv.Sys_DTCreated,'%Y-%m-%d %H:%i') as Sys_DTCreated,dv.Sys_User,dv.Sys_LastUser,dv.Sys_Exported,DATE_FORMAT(dv.Sys_DTExported,'%Y-%m-%d %H:%i') as Sys_DTExported,
+                                  dv.Sys_Info,dv.Cantidad,dv.Descuento1,dv.Descuento2,dv.Factor,dv.Impuesto1,dv.Impuesto2,dv.Impuesto3,dv.Impuesto4,dv.Notas,dv.Precio,dv.Status,dv.TipoCambio,dv.Unidad,
+                                  dv.XFacturar,dv.XSalir, if(dv.Documento is null,null,v.sys_guid) as Documento 
+                                  from venta v 
+                                  inner join dventa dv on v.sys_pk=dv.FK_Venta_Detalle 
+                                  inner join producto pr on dv.IProducto=pr.sys_pk
+                                   inner join almacen a on dv.IAlmacen=a.sys_pk 
+                                   where v.sys_guid=@sys_guid;"      // Esta consulta se ejecuta, tiene disponibles los valores de los campos de la transacción padre como parámetros
+                                       
+                                } // DVenta
+                                member "movcaja"
+                                {
+                                    //Los mismos miembros de "nombre_transacción" están disponibles
+                                    @"source":"select ct.Codigo as ICategoria,co.sys_guid as ICorte,dvi.Codigo as IDivisa,DATE_FORMAT(mc.Sys_TimeStamp,'%Y-%m-%d %H:%i') as Sys_TimeStamp,mc.Sys_GUID,
+                                    DATE_FORMAT(mc.Sys_DTCreated,'%Y-%m-%d %H:%i') as Sys_DTCreated,mc.Sys_User,mc.Sys_LastUser,mc.Sys_Exported,DATE_FORMAT(mc.Sys_DTExported,'%Y-%m-%d %H:%i') as Sys_DTExported,
+                                    mc.Sys_Info,mc.Auditado,mc.Cheques,mc.Contabilizado,mc.Depositos,mc.Documento,mc.Efectivo,DATE_FORMAT(mc.Fecha,'%Y-%m-%d %H:%i') as Fecha,DATE_FORMAT(mc.Hora,'%Y-%m-%d %H:%i') as Hora,
+                                    mc.Notas,mc.Partida,mc.Poliza,mc.Referencia,mc.Tarjetas,mc.TipoCambio,mc.Vales
+                                    from venta v 
+                                    inner join movcaja mc on v.IMovcaja=mc.sys_pk 
+                                    left join categoria ct on mc.ICategoria=ct.sys_pk 
+                                    left join corte co on mc.ICorte=co.sys_pk
+                                    left join divisa dvi on mc.IDivisa=dvi.sys_pk  
+                                    where v.sys_guid=@sys_guid;"      // Esta consulta se ejecuta, tiene disponibles los valores de los campos de la transacción padre como parámetros
+                                       
+                                } // movcaja
+                            }   //También podría tener sus propias sub-consultas           
+                        } // Venta
+                    } //   
+                } //FoliosDocumentos
+        
+           
+        } //configexport
+
+             ref db=dbr.open(field.str(cmd_args,"dbqn"))
+
+            ref data=dbr.ftt.export(db,config_export)
+
+             if not(field.exist(cmd_args,"outfile"))
+               {
+                cmd_args<"outfile">: path.concat(field.str(cmd_args,"outpath"),field.str(data,"uuid")+"."+field.dstr(cmd_args,"ext","fttjson"))
+               }
+
+        do dir.ensure(dir.name(field.str(cmd_args,"outfile")))
+
+        do file.wtext(field.str(cmd_args,"outfile"),to.json(data))
+
+        do print ("Archivo generado: "+field.str(cmd_args,"outfile"))
+    }
