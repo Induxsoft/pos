@@ -4,9 +4,15 @@ program ""
 {
     #include "functions.dkh"
     #include "serialize.dkh"
+    #include "dbr.dkh"
     #include "webcl.dkh"
     #include "r5.lib.dk"
+    #include "r5.dkh" //Funciones de interoperabilidad con versiones R5 de Induxsoft
 
+    @PathLog="" //ruta donde se guardaran los log, si es vació no creará log
+    @r5.program.gen.ventas="ftt.r5.ex.ventas.dkl" //herramienta que realiza las exportaciones de ventas
+    @r5.path.outfile="transactions"//ruta donde se almacenaran los archivos con las ventas exportadas
+    @r5.file.extension=".fttjson" //extension del archivo
 
     //1.- Obetener los args
     ref args=commandline("=")
@@ -22,6 +28,10 @@ program ""
     
     @r5.url.service=trim(@@(args,"$uri"))
     ref db=dbr.open(@qname)
+
+    //crear tabla de control de transaccciones
+    do CreateTableIfNotExist(db)
+
     //1.- realizar petición al servicio con transaciones pendientes
     do SendDataServicePending(db,args)
 
@@ -29,6 +39,7 @@ program ""
     new transacion
     {
         // @"id":uuid()
+        @"fecha":trim(@@(args,"$i"))
         @"ubicacion":trim(@@(args,"$ub"))
     }
     do GenTransAndRegister(db,@qname,transacion)

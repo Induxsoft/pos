@@ -1,0 +1,33 @@
+#include "dkli.dkh"
+#!
+module ""
+{
+    CreatePosData::&db,&data
+    {
+        id=trim(@@(data,"$id"))
+        if id==""{do rise_error(500,"No ha indicado un ID del posDataPack")}
+        
+        if dbr.num(db,"select sys_pk from pos_datapack where id=@id",data) > 0{return}
+        
+        new pos_datapack
+        {
+            @"sys_guid":uuid()
+            @"sys_timestamp*":dbr.sql("now()")
+            @"sys_dtcreated*":dbr.sql("now()")
+            @"sys_recver":0
+            @"id":id
+            @"location_id":@@(data,"$ubicacion")
+            @"processed":@@(data,"#processed")
+            @"error":@@(data,"$error")
+            @"sended":@@(data,"#sended")
+        }
+
+        do dbr.insert(db,"pos_datapack",pos_datapack)
+    }
+    UpdateTrasaction::&db,&data,id
+    {
+        new p{@"id":id}
+        do dbr.update(db,"pos_datapack",data,"id=@id",p)
+    }
+    
+}

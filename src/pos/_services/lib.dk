@@ -4,6 +4,7 @@ module "Funciones para los servicios"
 {
     @__user=""
     @__pwd=""
+    @__ids=""
     function get_db()
     {
         @open_connection = @false
@@ -15,6 +16,10 @@ module "Funciones para los servicios"
             if trim(@__user)!=""
             {
                 ref db:dbr.login(qname,trim(@__user),trim(@__pwd))
+            }
+            else if trim(@__ids)!=""
+            {
+                ref db:dbr.reconnect(qname,@__ids)
             }
             else {ref db:dbr.open(qname) }
             
@@ -49,7 +54,37 @@ module "Funciones para los servicios"
         }
         return post
     }
+    function GetDataAutentication()
+    {
+        ref credentials=record.create()
+        http_auth = @@(@http_context, "$request/headers/HTTP_AUTHORIZATION")
+        
+        if contains(http_auth,"Bearer")
+        {
+            token = trim(replace(http_auth,"Bearer",""))
+            if token == "" { do rise_error(99,"Se esperaba un identificador de sesión") }
 
+            using credentials
+            {
+                @"ids":token
+            }
+        }
+        else if contains(http_auth,"Basic")
+        {
+            string = trim(replace(http_auth,"Basic",""))
+            if string == "" { do rise_error(99,"No se proporcionaron las credenciales de autenticación necesarias.") }
+
+            ref parts = split(from.base64(string),":")
+            
+            using credentials
+            {
+                @"uid": list.str(parts,0)
+                @"pwd": list.str(parts,1)
+            }
+        }
+
+        return credentials
+    }
     function api_base_service()
     {
         expose response, params, payload, method

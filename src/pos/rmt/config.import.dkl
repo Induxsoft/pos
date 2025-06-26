@@ -1,0 +1,82 @@
+#include "dkli.dkh"
+#!
+module ""
+{
+    new @config_import
+    {     
+        member @"corte"
+        {
+            
+            @"target":"corte"
+            @"identity":"sys_guid=@sys_guid;"
+            @"insert":"*"
+            member @"queryfields"
+            {
+                @"icaja":"select sys_pk from caja where codigo=@icaja"
+                @"icajero":"select sys_pk from cajero where codigo=@icajero"
+            }
+        } //corte  
+        member @"foliosdocumentos"
+        {
+            @"target":"foliosdocumentos"
+            @"identity":"sys_guid=@sys_guid;"
+            @"insert":"*"
+            member @"queryfields" 
+            {
+                @"Block":"select sys_pk from blockdocumentos where concat(documento,'-',serie)=@Block;" 
+            }
+            member @"childs"  //Especifica las subconsultas de origen para las transacciones incluidas por cada fila de 'source'
+            {
+                member "Venta"
+                {
+                        @"target":"Venta"
+                        @"identity":"sys_guid=@sys_guid;"
+                        @"insert":"*"
+                        member @"queryfields" 
+                        {
+                            @"ICliente":"select sys_pk from cliente where codigo=@icliente;" 
+                            @"IFolio":"select sys_pk from foliosdocumentos where sys_guid=@Ifolio;"
+                            @"ICConsumo":"select sys_pk from cconsumo where codigo=@ICConsumo;"
+                            @"IAgente":"select sys_pk from agente where codigo=@IAgente;"
+                            @"ICaja":"select sys_pk from caja where codigo=@ICaja;"
+                            @"IDivisa":"select sys_pk from Divisa where codigo=@IDivisa;"
+                            @"IMovcaja":"select sys_pk from movcaja where sys_guid=@IMovcaja;"
+                            @"IPorteador":"select sys_pk from porteador where codigo=@IPorteador;"
+                            @"IRepartidor":"select sys_pk from repartidor where codigo=@IRepartidor;"
+                            @"ICorte":"select sys_pk from corte where Sys_guid=@ICorte;"
+                            @"AplicadoA":"select sys_pk from venta where Sys_guid=@AplicadoA;"
+                        }
+                        
+                    member @"childs"
+                    {
+                        member "DVenta"
+                        {
+                            @"identity":"sys_guid=@sys_guid;"
+                            @"target":"DVenta"
+                            @"insert":"*"
+                            member @"queryfields" 
+                            {
+                                @"FK_Venta_Detalle":"select sys_pk from venta where sys_guid=@FK_Venta_Detalle;" 
+                                @"IProducto":"select sys_pk from producto where codigo=@IProducto;"
+                                @"IAlmacen":"select sys_pk from almacen where codigo=@IAlmacen;"
+                                @"Documento":"select sys_pk from venta where Sys_guid=@Documento;"
+                            } // queryfields
+                        } // DVenta
+                        member "movcaja"
+                        {
+                            @"identity":"sys_guid=@sys_guid;"
+                            @"target":"movcaja"
+                            @"insert":"*"  
+                            member @"queryfields" 
+                            {
+                                @"ICategoria":"select sys_pk from categoria where codigo=@ICategoria;" 
+                                @"ICorte":"select sys_pk from corte where sys_guid=@ICorte;"
+                                @"IDivisa":"select sys_pk from divisa where codigo=@IDivisa;"
+                            } // queryfields    
+                        } // movcaja
+                    }   //También podría tener sus propias sub-consultas           
+                } // Venta
+            } //member   
+        } //FoliosDocumentos          
+    }
+}

@@ -1,0 +1,526 @@
+﻿
+#!
+
+// **Nombres de aplicaciones conocidas **
+@maxicomercio.r5="MaxiComercio.R5"
+@deminus.r5="Deminus.R5"
+
+// ** Valores predeterminados **
+@default_app=@maxicomercio.r5
+@default_engine="MY_SQL"
+
+// ** Valores enumerados en congruencia con la estructura de bases de datos **
+
+@divisa_predeterminada=0 //Clave primaria [sys_pk] de la divisa predeterminada, este valor debe establecerse con la expresión: @divisa_predeterminada=divisa_predeterminada(db)
+
+//Clases de productos  [cclaseproducto]
+@clase_materia_prima=1
+@clase_receta=2
+@clase_servicio=3
+@clase_articulo=4
+@clase_ensamble=5
+
+//Tipos de productos [ctipoproducto]
+@tipo_no_inventariable=1
+@tipo_inventariable=2
+
+//Métodos de valuación [cmetodosvaluacion]
+@mv_peps=1
+@mv_ueps=2
+@mv_prom=3
+@mv_iden=4
+@mv_ning=99
+@null_mark = "@null"
+
+new @metodos_valuacion
+{
+    @"PEPS":@mv_peps
+    @"UEPS":@mv_ueps
+    @"PROM":@mv_prom
+    @"IDEN":@mv_iden
+    @"NA":@mv_ning
+    @"Ninguno":@mv_ning
+    @"@null": @null
+}
+////////////////////////////////////////////
+
+
+
+//Mapeo de métodos del administrador de conexiones local de Induxsoft
+ref @lib_induxsoft_connections = _import_library("induxsoft_Connections.dll")
+
+do _map_function(@lib_induxsoft_connections, "induxsoft.Connections.Manager", "Select", "connections._select","System.String, System.Boolean","$") 
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+connections.sel::
+{
+    return connections._select(@default_app,@false)
+}
+
+connections.adminsel::
+{
+    return connections._select(@default_app,@true)
+}
+
+
+connections.select::appname
+{
+    return connections._select(appname,@false)
+}
+
+connections.adminselect::appname
+{
+    return connections._select(appname,@true)
+}
+
+//Asignar valor predeterminado
+set_default::&registro, campo, valor
+{
+    if not(field.exist(registro,campo))
+    {
+        registro<campo>:valor
+    }
+}
+
+//Obtener la clave primaria [sys_pk] de una tabla por su código
+obtener_clave::&db,tabla,campo, codigo
+{
+
+    new p { }
+
+    p<campo>:codigo
+    //do print("select sys_pk from "+tabla+ " where "+campo+"=@"+campo+";")
+    return dbr.num(db,"select sys_pk from "+tabla+ " where "+campo+"=@"+campo+";",p)
+}
+
+//Obtener la clave primaria [ID] de una tabla por su Constante
+obtener_claveEnum::&db,tabla,campo, codigo
+{
+
+    new p { }
+
+    p<campo>:codigo
+    // do print("select ID from "+tabla+ " where "+campo+"=@"+campo+";")
+    return dbr.num(db,"select ID from "+tabla+ " where "+campo+"=@"+campo+";",p)
+}
+
+clave_linea::&db,codigo
+{
+    return obtener_clave(db,"linea","codigo",codigo)
+}
+
+clave_marca::&db,codigo
+{
+    return obtener_clave(db,"marca","codigo",codigo)
+}
+
+clave_departamento::&db,codigo
+{
+    return obtener_clave(db,"departamento","codigo",codigo)
+}
+
+clave_divisa::&db,codigo
+{
+    return obtener_clave(db,"divisa","codigo",codigo)
+}
+
+
+clave_codigo::&db,&registro, columna
+{
+    do clave_codigo_explicit(db,registro,columna,columna,"codigo")
+}
+
+set_nulls::&record
+{
+    ref l=list.create_from_fields(record)
+
+    for i=0;i<list.count(l)
+    {
+        if field.typeof(record,list.str(l,i)== "1")
+        {
+            if field.str(record,list.str(l,i))== @null_mark
+            {
+                record<list.str(l,i)+"*">:@null
+            }
+        }
+    }
+}
+
+field.ExistAndNotNull::&registro,campo
+{
+    if not(field.exist(registro,campo))
+    {
+        return @false
+    }
+
+    if isnull(field.obj(registro,campo))
+    {
+        return @false
+    }
+
+    return @true
+}
+
+field.ifNullSet::&registro, campo, valor
+{
+    if not(field.ExistAndNotNull(registro,campo))
+    {
+        registro<campo>:valor
+    }
+}
+//verifica si la columna existe en el registro, si no obtiene el valor de la base de datos con base al nombre del campo indicado
+clave_codigo_explicit::&db,&registro, columna, tabla, campo
+{
+    
+    if field.ExistAndNotNull(registro,columna)
+    {
+        // do print("tabla: " + tabla + " Columna: " + columna + " Campo: " + campo)
+        // do print("***********************************************************")
+
+        k=obtener_clave(db,tabla,campo,field.str(registro,columna))
+
+        if k>0
+        {
+            registro<columna>:k
+        }
+        else
+        {
+            registro<columna+"*">:@null
+        }
+
+    }
+}
+
+clave_enum_explicit::&db,&registro, columna, tabla, campo
+{    
+    if field.exist(registro,columna)
+    {
+        // do print("tabla: " + tabla + " Columna: " + columna + " Campo: " + campo)
+        // do print("***********************************************************")
+        k=obtener_claveEnum(db,tabla,campo,field.str(registro,columna))
+
+        if k>0
+        {
+            registro<columna>:k
+        }
+        else
+        {
+            return            
+        }
+    }
+}
+
+//Obtener la divisa predeterminada de la configuración de R5
+divisa_predeterminada:: &db
+{
+    using p
+    {
+        @"pk":dbr.num(db,"Select varvalue from globalvar where varname='FXCA013';",@null)
+    }
+
+    ref rec= dbr.rec(db,"Select sys_pk,codigo, descripcion, tcambio from divisa where sys_pk=@pk;",p)
+
+    if isnull(rec)
+    {
+        do rise_error("No hay una divisa predeterminada")
+    }
+
+    return rec
+
+}
+
+
+//Registro con campos predeterminados de entidad para Devkron
+default_r5_entity::
+{
+    new rec
+    {
+        @"sys_guid":uuid()
+        @"sys_dtcreated":date_str(now(),"yyyy-MM-ddTHH:mm:ss")
+        @"sys_timestamp":date_str(now(),"yyyy-MM-ddTHH:mm:ss")
+        @"Sys_DTExported":date_str(now(),"yyyy-MM-ddTHH:mm:ss")
+        @"sys_recver": 0
+        @"sys_deleted":@false
+    }
+
+    return rec
+}
+
+//Define los campos básicos para un producto
+default_producto::
+{
+    ref p:default_r5_entity()
+
+    using p
+    {
+        @"iclase": @clase_articulo
+        @"itipo":  @tipo_inventariable
+        @"metodovaluacion":@mv_peps
+        @"reqlote":@false //Requiere control por lotes
+        @"reqserie":@false //Requiere control por número de serie
+        @"idivisa":@divisa_predeterminada //Divisa predeterminada
+    }   
+
+    return p
+}
+
+merge_records:: &r1,&r2
+{
+    go foreach.fobj(key:k, value:v) with (r2)
+    {
+        r1<k+"*">:v
+    }
+
+    return r1
+}
+
+clave_enum::&registro, campo, &claves
+{
+    if field.typeof(registro,campo)!=1
+    {
+        return
+    }
+
+    if field.exist(claves,field.str(registro,campo))
+    {
+        registro<campo>:field.num(claves,field.str(registro,campo))
+    }
+}
+//inserta o actualiza un producto indicado
+guardarProducto:: &db,&producto
+{    
+    ret=0
+
+    do set_nulls(producto)
+
+    //Campos que si vienen nulos deben tomar un valor predeterminado
+    do field.ifNullSet(producto,"ReqLote",0)
+    do field.ifNullSet(producto,"ReqSerie",0)
+    /////////////
+
+    if field.exist(producto, "codigo")
+    {        
+        producto<"codigo">: toupper(field.str(producto, "codigo"))
+    }
+
+    switch(field.num(producto, "iclase"))
+    {            
+        case @clase_servicio
+        {               
+            // do print("*********")
+            // do print("Servicio")            
+            // do print("*********")            
+
+            if field.exist(producto, "unidad")
+            {                        
+                using producto
+                {
+                    @"UnidadB": field.str(producto,"unidad")
+                    @"FactorB": 1
+                }
+            }
+            else
+            {                
+                using producto
+                {
+                    @"Unidad" : "UT"
+                    @"UnidadB": "UT"
+                    @"FactorB": 1
+                }
+            }
+        }
+        case @clase_articulo
+        {                
+            // do print("*********")
+            // do print("Articulo")            
+            // do print("*********")                       
+
+            if(field.num(producto, "ReqLote") || field.num(producto, "ReqSerie"))
+            {
+                producto<"itipo">: @tipo_inventariable
+                if field.num(producto, "ReqSerie")
+                {
+                    producto<"metodovaluacion">: @mv_iden
+                }
+                
+            }  
+
+            if(field.exist(producto, "itipo"))
+            {
+                if (field.num(producto, "metodovaluacion") == @mv_ning ) && field.num(producto, "itipo") == @tipo_inventariable
+                {                
+                    return 0
+                }
+            }
+
+
+            if field.exist(producto, "unidad")
+            {                    
+                using producto
+                {
+                    @"Unidadb": field.str(producto,"unidad")
+                    @"Factorb": 1
+                }
+            }
+            else
+            {
+                using producto
+                {
+                    @"Unidad" : "PZA"
+                    @"Unidadb": "PZA"
+                    @"Factorb": 1
+                }
+            }
+        }
+        case @clase_ensamble
+        {
+            
+        }
+        //Deminus
+        case @clase_materia_prima
+        {
+            
+        }
+        //Deminus
+        case @clase_receta
+        {
+            
+        }
+    }
+
+    //***Si el producto requiere lotes o series, debe ser artículo inventariable
+    //***Si el artículo requiere números de serie, el método de valuación debe ser Identificado (solo se puede usar el método de valuación Identificado con control de series)
+    //***El método de valuación únicamente puede ser Ninguno si se trata de un artículo No inventariable o un servicio
+
+    if dbr.num(db,"select sys_pk from producto where codigo=@codigo;",producto)>0
+    {
+        //Actualizar
+        do dbr.update(db,"producto",producto, "codigo=@codigo;",producto)
+        ret=2
+    }
+    else
+    {
+        //Insertar
+        do dbr.insert(db,"producto",merge_records(default_producto(),producto))
+        ret=1
+    }
+
+    return ret
+}
+
+//inserta o actualiza un producto
+print_actualizar_producto::&db,&producto
+{
+    // do print(to.json(producto))
+    ret=guardarProducto(db, producto)
+    switch ret
+    {
+        case 0
+        {
+            do PrintLog(" ** Producto: "+@@(producto,"$codigo")+" Ninguna acción realizada.")
+            break
+        }
+
+        case 1
+        {
+            do PrintLog(" ** Producto: "+@@(producto,"$codigo")+" Registro añadido.")
+            break
+        }
+
+        case 2
+        {
+            do PrintLog(" ** Producto: "+@@(producto,"$codigo")+" Registro actualizado.")
+            break
+        }
+    }
+    
+    do PrintLog("")
+
+    exception
+    {
+        do PrintLog(last_error())
+        do PrintLog("***********************************************************")
+        do PrintLog("")
+        ret=-1
+    }
+    return ret
+}
+
+ref @logR5=text.create()
+//Imprime los mensajes indicados, y captura en @logR5 los mensajes si la varible @PathLog existe y si es diferente a vacío
+PrintLog::text
+{
+    do Print(text)
+    if isset("@PathLog")
+    {
+        if trim(@PathLog)!=""
+        {
+            do text.say(@logR5,text)
+        }
+    }
+}
+//Guarda en un archivo los datos obtenidos de @logR5
+SaveLog::pathlog
+{
+    if dir.exists(pathlog)
+    {
+        pathfile=path.concat(pathlog,date_str(now(),"yyyy-MM-dd HH-mm")+".log")
+        do file.wtext(pathfile,text.get(@logR5))
+    }
+    else 
+    {
+        do Print("No existe el directorio: "+pathlog)
+    }
+}
+print_fin_programa::
+{
+    do print("**************************************************************************")
+    do print("                                                        www.induxsoft.net")
+    do print("")
+
+    do print("Proceso terminado.")
+    do input("Presione  ENTER para cerrar la consola.")
+}
+
+init_r5_importar::titulo
+{
+    ref args=commandline("=")
+
+	archivo=field.dstr(args,"input","")
+    @qname=field.dstr(args,"qname","")
+
+    //Mensaje de inicio de la consola
+    do print("")
+    do print("**************************************************************************")
+    do print(titulo)
+    do print("**************************************************************************")
+    do print("Aplicación      : "+@default_app)
+    do print("Archivo de datos: "+archivo)
+    
+    ref tabla=table.from(file.rtext(archivo))
+
+    if isnull(tabla)
+    {
+        do print("La tabla está vacía.")
+        do input("Presione  ENTER para terminar.")
+        return @null
+    }
+
+    //Selección de conexión si esta no ha sido indicada en la línea de comandos
+    if @qname==""
+    {
+        @qname=connections.sel()
+    }
+    do print("Base de datos   : "+@qname)
+    do print("")
+    do print("")
+
+    if @qname==""
+    {
+        //El usuario ha cancelado el diálogo de selección de conexión
+        return @null
+    }
+
+    return tabla
+}

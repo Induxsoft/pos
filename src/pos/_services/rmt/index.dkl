@@ -18,14 +18,22 @@ module "POS Services"
     {
         if method != "GET" && method!="POST" { do rise_error(511,"Método proporcionado no admitido") }
         if method=="GET"{ref postData=params}
-
-        @__user=trim(@@(postData,"$uid"))
-        @__pwd=trim(@@(postData,"$pwd"))
         
+        ref authData=GetDataAutentication()
+        if @count(list.create_from_fields(authData)) < 1{do rise_error(500,"No ha definido los datos de autenticación,`ids` o `uid y pwd`")}
+
+        @__ids=trim(@@(authData,"$ids"))
+        @__user=trim(@@(authData,"$uid"))
+        @__pwd=trim(@@(authData,"$pwd"))
+        
+        if not(isnull(@@(postData,"&data")))
+        {
+            point @list to Importar
+        }
         //abrir base de datos con usuario y contraseña
         do dbr.setHashUnicode(@true)
         ref db = get_db()
-
+        
         that @list(db,postData)->*data
 
         using response

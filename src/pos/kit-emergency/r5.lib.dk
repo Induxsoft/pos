@@ -5,7 +5,7 @@ module ""
     //Verifica si existe la tabla indicada
     TableExist::&db,table
     {
-        table >> p
+        new p{@"table":table}
         name_table=dbr.str(db,"SHOW TABLES LIKE '"+table+"';",p)
         return trim(name_table)!=""
     }
@@ -438,34 +438,77 @@ module ""
         @r5.path.outfile="transactions"
         @r5.file.extension=".fttjson"
         @r5.url.service=""
-        
+        @r5.limit_query= 50
         GenTransAndRegister::&db,qname,&data
         {
             do dir.ensure(@r5.path.outfile)
             
-            if trim(@@(data,"$id"))==""{id=uuid()}
+            do PrintLog("===== Generando nuevas transacciones ====")
+
+            do dbr.execute(db,"update  foliosdocumentos f 
+            inner join blockdocumentos bk on f.block=bk.sys_pk
+            inner join venta v on f.sys_pk=v.ifolio
+            inner join corte c on v.icorte=c.sys_pk
+            set f.sys_exported=0,f.sys_dtexported=null,v.sys_exported=0,v.sys_dtexported=null,c.sys_exported=0,c.sys_dtexported=null
+            where 
+            ifnull(v.sys_exported,0)=0
+            AND if(IFNULL(@fecha,'')='',TRUE,DATE(v.fecha)>=DATE(@fecha)) ;",data)
+            //entre 50 porque 
+            rows=dbr.num(db,ftext("SELECT COUNT(*)/#<@r5.limit_query> FROM venta v
+                        WHERE 
+                        ifnull(v.Sys_Exported,0)=0
+                        AND if(IFNULL(@fecha,'')='',TRUE,DATE(v.fecha)=DATE(@fecha) )
+                        ;"),data)
             
-            path_file=path.concat(@r5.path.outfile,id+@r5.file.extension)
-            args="dbqn=#<qname> outfile=#<path_file>"
-
-            res=_exec(@r5.program.gen.ventas,args,@true,@exec_timeout,@false)
-
-            new pos_datapack
+            ref lrows=split(str(rows),".")
+            
+            if @count(lrows)>1
             {
-                @"sys_guid":uuid()
-                @"sys_timestamp*":dbr.sql("now()")
-                @"sys_dtcreated*":dbr.sql("now()")
-                @"sys_recver":0
-                @"id":id
-                @"location_id":@@(data,"$ubicacion")
-                @"processed":@@(data,"#processed")
-                @"error":@@(data,"$error")
-                @"sended":@@(data,"#sended")
+                segparte=list.str(lrows,1)
+                if parse.num(segparte) > 0{rows=trun(rows) + 1}
             }
+            ref transaccciones=list.create()
 
-            do dbr.insert(db,"pos_datapack",pos_datapack)
+            for i = 0; i < rows
+            {
+                id=uuid()
+                path_file=path.concat(@r5.path.outfile,id+@r5.file.extension)
+                
+                new import_context
+                {
+                    @"dbqn":qname
+                    @"outfile":path_file
+                    @"fecha":trim(@@(data,"$fecha"))
+                    @"limit":@r5.limit_query
+                }
+                res=runscript(@r5.program.gen.ventas,"import_context",import_context)
+                
+                new pos_datapack
+                {
+                    @"sys_guid":uuid()
+                    @"sys_timestamp*":dbr.sql("now()")
+                    @"sys_dtcreated*":dbr.sql("now()")
+                    @"sys_recver":0
+                    @"id":id
+                    @"location_id":@@(data,"$ubicacion")
+                    @"processed":@@(data,"#processed")
+                    @"error":@@(data,"$error")
+                    @"sended":@@(data,"#sended")
+                }
 
-            return pos_datapack
+                do dbr.insert(db,"pos_datapack",pos_datapack)
+                // do PrintLog(replace(trim(res),"\n",""))cls
+                do PrintLog("===== Transacción: "+id+" generado correctamente ====")
+                
+                do list.add(transaccciones,pos_datapack)
+                do PrintLog("")
+
+                exception
+                {
+                    do PrintLog("**** Ocurrió un error: "+last_error())
+                }
+            }
+            return transaccciones
         }
 
         UpdateTrasaction::&db,&data,id
@@ -476,9 +519,16 @@ module ""
 
         SendDataServicePending::&db,&data
         {
-            ref transacciones=dbr.list(db,"select * from pos_datapack where ifnull(processed,0)=0 order by sys_pk ASC",data)
+            ref transacciones=dbr.list(db,"SELECT p.sys_pk,p.sys_guid,
+            DATE_FORMAT(p.sys_dtcreated,'%Y-%m-%d %H:%i:%ss')sys_dtcreated,
+            DATE_FORMAT(p.sys_timestamp,'%Y-%m-%d %H:%i:%ss')sys_timestamp,
+            p.sys_info,p.sys_recver,p.sys_deleted,p.id,
+            p.location_id,p.processed,p.`error`,
+            DATE_FORMAT(p.las_error,'%Y-%m-%d %H:%i:%ss')las_error,
+            p.sended
+            from pos_datapack p where ifnull(processed,0)=0 order by sys_pk ASC",data)
             
-            do print("*** Transacciones pendientes: "+str(@count(transacciones)))
+            do PrintLog("*** Transacciones pendientes: "+str(@count(transacciones)))
 
             for i = 0; i < @count(transacciones)
             {
@@ -501,24 +551,30 @@ module ""
             }
             do UpdateTrasaction(db,t,@@(trans,"$id"))
 
-            do print("*** Transación: "+@@(trans,"$id")+" enviado ***")
+            do PrintLog("*** Transación: "+@@(trans,"$id")+" enviado ***")
+            
             res=http.request(@r5.url.service,"POST",h,to.json(trans))
-
             ref result=from.json(res)
-
             if not(@@(result,"#success")){do rise_error(99,@@(result,"$message"))}
 
-            do print("*** Transación: "+@@(trans,"$id")+" importado correctamente ***")
+            new t
+            {
+                @"processed":@true
+            }
+            do UpdateTrasaction(db,t,@@(trans,"$id"))
 
+            do PrintLog("*** Transación: "+@@(trans,"$id")+" importado correctamente ***")
+            do PrintLog("")
+            
             exception
             {
                 error=last_error()
-                do print("*** Ocurrio un error: "+error)
+                do PrintLog("*** Ocurrio un error: "+error)
 
                 new t
                 {
                     @"error":error
-                    @"las_error":dbr.sql("now()")
+                    @"las_error*":dbr.sql("now()")
                 }
                 do UpdateTrasaction(db,t,@@(trans,"$id"))
             }
@@ -528,10 +584,43 @@ module ""
             new h
             {
                 @"content-type":"application/json"
-                @"Authorization":to.base64(ftext("Basic #<uid>:#<pwd>"))
+                @"Authorization":"Basic "+to.base64(ftext("#<uid>:#<pwd>"))
             }
             
             return h
+        }
+
+        CreateTableIfNotExist::&db
+        {
+            if TableExist(db,"pos_datapack"){return}
+
+            do PrintLog("===== Creando tabla `pos_datapack` =====")
+
+            sql_table="CREATE TABLE IF NOT EXISTS `pos_datapack` (
+                    `sys_pk` int(11) NOT NULL AUTO_INCREMENT,
+                    `sys_guid` varchar(32) NOT NULL,
+                    `sys_dtcreated` datetime DEFAULT NULL,
+                    `sys_timestamp` datetime NOT NULL,
+                    `sys_info` varchar(32) DEFAULT NULL,
+                    `sys_user` varchar(32) DEFAULT NULL,
+                    `sys_lastuser` varchar(32) DEFAULT NULL,
+                    `sys_exported` tinyint(1) DEFAULT NULL,
+                    `sys_dtexported` datetime DEFAULT NULL,
+                    `sys_recver` int(11) DEFAULT NULL,
+                    `sys_deleted` tinyint(1) DEFAULT NULL,
+                    `sys_lock` int(11) DEFAULT NULL,
+                    `id` varchar(32) NOT NULL,
+                    `location_id` varchar(43) NOT NULL,
+                    `processed` tinyint(1) DEFAULT NULL,
+                    `error` text,
+                    `las_error` datetime DEFAULT NULL,
+                    `sended` tinyint(1) DEFAULT NULL,
+                    PRIMARY KEY (`sys_pk`),
+                    UNIQUE KEY `sys_guid` (`sys_guid`),
+                    UNIQUE KEY `id` (`id`)
+                    ) ENGINE=InnoDB DEFAULT CHARSET=latin1;"
+
+            return dbr.execute(db,sql_table,@null)
         }
     }
 }

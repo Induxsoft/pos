@@ -31,11 +31,11 @@ program ""
 
     //2.- realizar petición al servicio y parsear la respuesta
     //prepara petición
-    new h{@"content-type":"application/json"}
+    ref h=GetHeaders(@uid,@pwd)
     new data
     {
-        @"uid":@uid
-        @"pwd":@pwd
+        // @"uid":@uid
+        // @"pwd":@pwd
         @"ub":trim(@@(args,"$ub"))
     }
     

@@ -3,6 +3,9 @@
 module ""
 {
     #include "querys.dkl"
+    #include "lib.dk"
+    #include "dbr.ftt.dkl"
+    #include "config.import.dkl"
 
     TableExist::&db,table
     {
@@ -11,7 +14,7 @@ module ""
         return trim(name_table)!=""
     }
     
-    list::&db,&params
+    Exportar::&db,&params
     {
         do dbr.apps.action.grant("VP50")
         if trim(@@(params,"$ub"))!=""{params<"_entiy_id">:trim(@@(params,"$ub"))}
@@ -95,8 +98,46 @@ module ""
         return data_export
     }
     
-    point @read to list
-    point @create to list
-    point @update to list
-    point @list to list
+    Importar::&db,&params
+    {
+        do dbr.apps.action.grant("VP50")
+        id=trim(@@(params,"$id"))
+        new pos_datapack
+        {
+            @"id":id
+            @"ubicacion":trim(@@(params,"$location_id"))
+        }
+        do CreatePosData(db,pos_datapack)
+
+        ref data=@@(params,"&data")
+        // do file.wtext("C:/Users/Dev/Documents/devkrons/devkronNet/pos/rmt/"+id+".json",to.json(data))
+        do dbr.ftt.import(db,data,@config_import)
+
+        new pos_datapack
+        {
+            @"processed":@true
+        }
+        do UpdateTrasaction(db,pos_datapack,id)
+
+        return record.create()
+
+        exception
+        {
+            error=last_error()
+            if isset("id")
+            {
+                new pos_datapack
+                {
+                    @"error":error
+                    @"las_error*":dbr.sql("now()")
+                }
+                do UpdateTrasaction(db,pos_datapack,id)
+            }
+            do rise_error(500,error)
+        }
+    }
+    point @read to Exportar
+    point @create to Exportar
+    point @update to Exportar
+    point @list to Exportar
 }

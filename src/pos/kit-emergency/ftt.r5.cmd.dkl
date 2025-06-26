@@ -4,8 +4,9 @@
 module "fft.r5.cmd"
 {
 
-    ref cmd_args=commandline("=")
-
+    if isset("@import_context"){ref cmd_args=@import_context}
+    else{ref cmd_args=commandline("=")}
+    
     if not(field.exist(cmd_args,"dbqn"))
     {
         do print("No se ha indicado el nombre cualificado de una conexión a bases de datos")
