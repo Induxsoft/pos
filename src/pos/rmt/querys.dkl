@@ -194,5 +194,23 @@ module "Consultas para la exportación"
    	LEFT JOIN cconsumo cc ON ccl.uf_icc=cc.sys_pk
     WHERE if(IFNULL(@ubicacion,0)=0,TRUE,cc.ubicacion=@ubicacion)"
 
+    @list_folios_documentos="SELECT f.sys_guid,
+    DATE_FORMAT(f.sys_dtcreated,'%Y-%m-%d %H:%i:%s')sys_dtcreated,
+    DATE_FORMAT(f.sys_timestamp,'%Y-%m-%d %H:%i:%s')sys_timestamp,
+    DATE_FORMAT(f.fecha,'%Y-%m-%d %H:%i:%s')fecha,
+    f.folio,
+    f.cancelado ,
+    CONCAT(b.documento,'-',b.serie)block
+    FROM foliosdocumentos f
+    INNER JOIN blockdocumentos b ON f.`block`=b.sys_pk
+    WHERE (IFNULL(@ubicacion,0)=0 OR b.ubicacion=@ubicacion)"
 
+    @list_block_documentos="SELECT b.sys_guid,
+    b.activo ,
+    b.datos,
+    cd.const documento,b.finicial,b.fiscal,b.fultimo,b.idcontrol,
+    b.numcontrol,b.serie,b.uf_cfdfolio,b.uf_cfdi_info,b.uf_cfdi_info
+    FROM blockdocumentos b
+    INNER JOIN cdocumentos cd ON b.documento=cd.id
+    WHERE (IFNULL(@ubicacion,0)=0 OR b.ubicacion=@ubicacion)"
 }

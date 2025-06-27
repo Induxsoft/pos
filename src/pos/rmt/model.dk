@@ -6,6 +6,8 @@ module ""
     #include "lib.dk"
     #include "dbr.ftt.dkl"
     #include "config.import.dkl"
+    #include "inventario/movimientos.dkh"
+    #include "dprod/dprod.dk"
 
     TableExist::&db,table
     {
@@ -62,7 +64,10 @@ module ""
             @"productos_elementos*":list.create()
             @"productos_remplazos*":list.create()
             @"cproducionproductos*":list.create()
+            @"foliosdocumentos*":dbr.list(db,ftext(@list_folios_documentos),entity)
+            @"block_documentos*":dbr.list(db,ftext(@list_block_documentos),entity)
         }
+        
         if TableExist(db,"cproduccion_producto_")
         {
             data_export<"cproducionproductos*">:dbr.list(db,ftext(@list_cproducion_productos),entity)
@@ -98,10 +103,37 @@ module ""
         return data_export
     }
     
+    PrepareGlobalVars::&db
+    {
+        cat=dbr.vars.get(db,"v12.ventas.salida")
+        cat >> p
+        cventa=dbr.num(db,"select sys_pk from categoria where codigo=@cat",p)
+        if parse.num(cventa)<1{do rise_error(500,"No ha configurado una categoria Salidas por ventas `v12.ventas.salida` ")}
+
+        new args
+        {
+            @"c-venta":cventa
+        }
+        @erp.dprod.CLASES="2,4,5,6" 
+        @dias_ventas=field.dnum(args,"dias-ventas",7) //dias-ventas=n. Cantidad de días atrás (n) a tomar en cuenta como máximo de la lista de ventas pendientes.
+        @limit_ventas=field.dnum(args,"limit-ventas",100)//limit-ventas=l. Cantidad de filas (l) a tomar en cuenta como máximo de la lista de ventas pendientes.
+        @cat_prod_ventas=field.dnum(args,"c-venta",8) //Clave primaria de la categoría para salida por ventas
+        @pre_errors=@true //preservar-errores. Guarda los errores de producción o salida por ventas en la tabla 'dprod_log'.
+        @f_inicio=@@(args,"$f_inicio")//f_inicio=f. Fecha de inicio del rango de fechas, en donde f es una expresada con el formato yyyy-mm-dd.
+        @f_final=@@(args,"$f_final") //f_final=f. Fecha final del rango de fechas, en donde f es una expresada con el formato yyyy-mm-dd.
+        @kventa=field.dnum(args,"k-venta",0)//k-venta=pk. La clave primaria (pk) de una venta en particular que será la única en ser procesada
+        @rventa=field.dstr(args,"venta","")//venta=r. La referencia (r) de una venta en particular que será la única en ser procesada
+
+        return args
+    }
     Importar::&db,&params
     {
+        ref @LAST_DCARDEX=@null
         do dbr.apps.action.grant("VP50")
-        id=trim(@@(params,"$id"))
+        do errordet(@false)
+        id=trim(@@(params,"$id"))   
+        do PrepareGlobalVars(db)
+
         new pos_datapack
         {
             @"id":id
@@ -110,7 +142,6 @@ module ""
         do CreatePosData(db,pos_datapack)
 
         ref data=@@(params,"&data")
-        // do file.wtext("C:/Users/Dev/Documents/devkrons/devkronNet/pos/rmt/"+id+".json",to.json(data))
         do dbr.ftt.import(db,data,@config_import)
 
         new pos_datapack
@@ -118,6 +149,22 @@ module ""
             @"processed":@true
         }
         do UpdateTrasaction(db,pos_datapack,id)
+        //sincronizar existencias
+        
+        new params_salidas
+        {
+            dias:=@dias_ventas
+            limite:=@limit_ventas
+            cat_venta:=@cat_prod_ventas
+            preservar_log:=@pre_errors
+            f_inicio:=@f_inicio
+            f_final:=@f_final
+            kventa:=@kventa
+            rventa:=@rventa
+            gen_error:=@true
+        }
+        
+        do erp.dprod.salidasxventas(db,params_salidas)
 
         return record.create()
 
@@ -126,6 +173,10 @@ module ""
             error=last_error()
             if isset("id")
             {
+                if not(isnull(@LAST_DCARDEX))
+                {
+                    error=error + "\r\nProducto: "+@@(@LAST_DCARDEX,"$cod_prod")+" - "+@@(@LAST_DCARDEX,"$desc_prod")
+                }
                 new pos_datapack
                 {
                     @"error":error

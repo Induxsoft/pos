@@ -32,6 +32,10 @@ module ""
                         @"target":"Venta"
                         @"identity":"sys_guid=@sys_guid;"
                         @"insert":"*"
+                        @"row_in_transaction":@true // solo puede ver una transaccion, como ya hay una en venta no puede ver otra en foliosdocumentos, ni en dventa
+                                                    // si hubiera una transaccion en  foliosdocumentos, no podria ver otra en venta ni dventa
+                                                    //motivo, podria ocacionar un bucles de transaccion o hacer el commit en momento donde no se debe
+                                                    //igual sucederia con los otros elementos
                         member @"queryfields" 
                         {
                             @"ICliente":"select sys_pk from cliente where codigo=@icliente;" 
@@ -54,12 +58,15 @@ module ""
                             @"identity":"sys_guid=@sys_guid;"
                             @"target":"DVenta"
                             @"insert":"*"
+                            @"after":"update dventa set xsalir=0 where sys_guid=@sys_guid and sys_lastuser='dprod'"
                             member @"queryfields" 
                             {
                                 @"FK_Venta_Detalle":"select sys_pk from venta where sys_guid=@FK_Venta_Detalle;" 
                                 @"IProducto":"select sys_pk from producto where codigo=@IProducto;"
                                 @"IAlmacen":"select sys_pk from almacen where codigo=@IAlmacen;"
                                 @"Documento":"select sys_pk from venta where Sys_guid=@Documento;"
+                                @"XSalir":"select ifnull(@Cantidad,0)"
+                                @"sys_lastuser":"select sys_lastuser from dventa where sys_guid=@sys_guid"
                             } // queryfields
                         } // DVenta
                         member "movcaja"

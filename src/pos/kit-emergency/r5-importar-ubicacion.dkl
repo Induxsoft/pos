@@ -76,6 +76,8 @@ program ""
     ref grupoproductos=@("&grupoproductos")
     ref variables=@("&variables")
     ref cproducionproductos=@("&cproducionproductos")
+    ref block_documentos=@("&block_documentos")
+    ref foliosdocumentos=@("&foliosdocumentos")
 
     if isnull(ubicacion)
     {
@@ -112,6 +114,16 @@ program ""
     do PrintLog("\n")
     do PrintLog("====Importar repartidores: "+str(@count(repartidores))+" ====")
     do Importar.data(db,repartidores,"repartidor",@null)
+
+    do PrintLog("\n")
+    do PrintLog("====Importar block documentos: "+str(@count(block_documentos))+" ====")
+    point @function_validate to ValidateBlockDocumentos
+    do Importar.data(db,block_documentos,"blockdocumentos",@function_validate)
+
+    do PrintLog("\n")
+    do PrintLog("====Importar folios documentos: "+str(@count(foliosdocumentos))+" ====")
+    point @function_validate to ValidateFoliosDocumentos
+    do Importar.data(db,foliosdocumentos,"foliosdocumentos",@function_validate)
 
     do PrintLog("\n")
     do PrintLog("====Importar almacenes: "+str(@count(almacenes))+" ====")

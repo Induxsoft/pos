@@ -72,6 +72,9 @@ module ""
         else 
         {
             conditional=ifstr(trim(conditional)!="",conditional,"#<campo>=@#<campo>")
+            
+            ref _row=record.copy(row,"*")
+            _row<"id">:id
 
             do dbr.update(db,table,row,ftext(conditional),row)
             do PrintLog(" - "+table+" "+_text+" actualizado")
@@ -242,6 +245,31 @@ module ""
         if id_divisa < 1{do rise_error(99,"No se encontró la divisa: "+@@(row,"$divisa"))}
         if id_tipo < 1{do rise_error(99,"No se encontró el tipo de cliente: "+@@(row,"$tipo"))}
 
+        pk_exist=0
+        //si no se kiere validar si el cliente existe por el nombre, quitar esta sección        
+        ref cliente=dbr.rec(db,"select sys_pk,codigo,rfc,nombre,curp,codcuenta 
+        from cliente where codigo=@codigo or nombre=@nombre",row)
+
+        if not(isnull(cliente))
+        {
+            pk_exist=@@(cliente,"#sys_pk")
+            using row
+            {
+                @"codigo":@@(cliente,"$codigo")
+                @"nombre":@@(cliente,"4nombre")
+            }
+        }
+        
+        //quitar hasta aqui
+
+        new res
+        {
+            @"_field":"codigo"
+            @"id":pk_exist
+        }
+
+        if pk_exist > 0{ res<"conditional">:"sys_pk=@id"}
+        
         using row
         {
             @"idivisa":id_divisa
@@ -249,6 +277,8 @@ module ""
         }
 
         do field.remove(row,"divisa")
+
+        return res
     }
     ValidateCConsumo::&db,&data,&row,table,index
     {
@@ -429,6 +459,53 @@ module ""
         
         return res
     }
+    #!
+    ValidateBlockDocumentos::&db,&data,&row,table,index
+    {
+        _text="documento: "+@@(row,"$documento")+" Serie: "+@@(row,"$serie")
+
+        do Record_enum_explicit(db,row, "documento","cdocumentos","const","#id") 
+        if @@(row,"#documento") < 1{do rise_error(99,"No se encontró el documento: "+@@(row,"$documento"))}
+
+        pk_exist=dbr.num(db,"select sys_pk from "+table+" where documento=@documento and serie=@serie",row)
+        new res
+        {
+            @"id":pk_exist
+            @"_text":_text
+        }
+
+        if pk_exist > 0
+        {
+            res<"conditional">:"documento=@documento and serie=@serie"
+        }
+
+        return res
+    }
+    #!
+    ValidateFoliosDocumentos::&db,&data,&row,table,index
+    {
+        _text="Block documento: "+@@(row,"$block")
+
+        pk_exist=dbr.num(db,"select f.sys_pk FROM foliosdocumentos f
+        INNER JOIN blockdocumentos b ON f.`block`=b.sys_pk 
+        where f.folio=@folio and CONCAT(b.documento,'-',b.serie)=@block",row)
+
+        row<"block">:dbr.num(db,"select sys_pk from blockdocumentos b where CONCAT(b.documento,'-',b.serie)=@block",row)
+        if @@(row,"#block") < 1{do rise_error(500,"No se encontró el block de documento: "+_text)}
+
+        new res
+        {
+            @"id":pk_exist
+            @"_text":_text
+        }
+
+        if pk_exist > 0
+        {
+            res<"conditional">:"folio=@folio and block=@block"
+        }
+
+        return res
+    }
 
     //////////////ENVIO DE DATOS////////////
     
@@ -570,7 +647,8 @@ module ""
             {
                 error=last_error()
                 do PrintLog("*** Ocurrio un error: "+error)
-
+                do PrintLog("")
+                
                 new t
                 {
                     @"error":error

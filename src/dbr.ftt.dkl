@@ -123,14 +123,25 @@ module "ftt.export"
         if trim(field.dstr(config,"target",""))=="" { do rise_error(-99,"No se ha indicado el nombre de la tabla de destino en el atributo 'target'") }
 
         ref rows=field.obj(trans,"rows")
+        
+        in_transaction=parse.bool(@@(config,"in_transaction"))
+        row_in_transaction=parse.bool(@@(config,"row_in_transaction"))
+
+        if in_transaction && not(dbr.in_transaction(db))
+        {
+            row_in_transaction=@false
+            do dbr.begin(db)
+        }
 
         for i=0;i<list.count(rows)
         {
             ref row_data=list.obj(rows,i)
             ref row_rec=field.obj(row_data,"data")
 
-            if parse.bool(field.dstr(config,"case_insensitive","true")) { ref row_rec=record.caseinsensitive(row_rec) }
+            if row_in_transaction && not(dbr.in_transaction(db)){do dbr.begin(db)}
 
+            if parse.bool(field.dstr(config,"case_insensitive","true")) { ref row_rec=record.caseinsensitive(row_rec) }
+            
            //Campos de consulta
             if field.exist(config,"queryfields")
             {
@@ -141,11 +152,9 @@ module "ftt.export"
                     ref obj=dbr.scalar(db,field.str(dic_qf,list.str(lqf,x)),row_rec)
                     row_rec<list.str(lqf,x)+"*">: obj
                 }
-
                 ref row_rec=from.json(to.json(row_rec)) //Asegurar conversión de tipos
                 if parse.bool(field.dstr(config,"case_insensitive","true")) { ref row_rec=record.caseinsensitive(row_rec) }
             }
-
             do dbr.ftt.remove_fields(row_rec, field.dstr(config,"exclude",""))
 
             // before
@@ -157,7 +166,6 @@ module "ftt.export"
                 {
                     ref row_rec=field.copy(row_rec,field.str(config,"insert"))
                 }
-
                 // Insertar
                 do dbr.insert(db, field.str(config,"target"),row_rec)
                 
@@ -170,7 +178,6 @@ module "ftt.export"
                 {
                     ref row_rec=field.copy(row_rec,field.str(config,"update"))
                 }
-
                 do dbr.update(db, field.str(config,"target"),row_rec,field.str(config,"identity"),row_rec)
                 if field.dstr(config,"on_update","")!="" { do dbr.execute(db,field.str(config,"on_update"),row_rec) }
             }
@@ -183,24 +190,47 @@ module "ftt.export"
                     for j=0;j<list.count(childs)
                     {
                         ref child=list.obj(childs,j)
-                        do dbr.ftt.import.trans(db, child, field.dobj(config,"childs/"+field.str(child,"type"),@null))
+                        ref child_type=field.dobj(config,"childs/"+field.str(child,"type"),@null)
+                        //prevenir abrir mas transaciones si ya esta abierta
+                        if dbr.in_transaction(db) && (parse.bool(@@(child_type,"in_transaction")) || parse.bool(@@(child_type,"row_in_transaction"))) 
+                        {
+                            do field.remove(child_type,"in_transaction")
+                            do field.remove(child_type,"row_in_transaction")
+                        }
+                        do dbr.ftt.import.trans(db, child, child_type)
                     }
                 }
             }
-
             // after
             if field.dstr(config,"after","")!="" { do dbr.execute(db,field.str(config,"after"),row_rec) }
-            
+
+            if row_in_transaction && dbr.in_transaction(db) {do dbr.commit(db)}
+
             exception
             {
                 msg=last_error()
-                msg="Destino: "+field.dstr(config,"target","") + " fila: "+str(i)+" mensaje: " + msg
+                msg_prod=""
+                if isset("row_rec")
+                {
+                    if tolower(@@(trans,"$type"))=="foliosdocumentos" && trim(@@(row_rec,"$block"))!=""{msg_prod=" Documento: "+@@(row_rec,"$block")}
+                    else if tolower(@@(trans,"$type"))=="venta" && trim(@@(row_rec,"$referencia"))!=""{msg_prod=" Venta: "+@@(row_rec,"$referencia")}
+                    else if tolower(@@(trans,"$type"))=="dventa" && trim(@@(row_rec,"$sys_guid"))!=""{msg_prod=" dventa: "+@@(row_rec,"$sys_guid")}
+                }
+                msg="Destino: "+field.dstr(config,"target","") + " fila: "+str(i+1)+msg_prod+" mensaje: " + msg
+                
+                if row_in_transaction && dbr.in_transaction(db){do dbr.rollback(db)}
 
                 do rise_error(-99,msg)
             }
         }
 
+        if in_transaction && dbr.in_transaction(db) {do dbr.commit(db)}
 
+        exception
+        {
+            if in_transaction && dbr.in_transaction(db){do dbr.rollback(db)}
+            do rise_error(last_error_code(),last_error())
+        }
     }
 
     #!
