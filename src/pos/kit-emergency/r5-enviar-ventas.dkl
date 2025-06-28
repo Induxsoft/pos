@@ -7,13 +7,16 @@ program ""
     #include "dbr.dkh"
     #include "webcl.dkh"
     #include "r5.lib.dk"
+    #include "dbr.ftt.dkl"
     #include "r5.dkh" //Funciones de interoperabilidad con versiones R5 de Induxsoft
 
     @PathLog="" //ruta donde se guardaran los log, si es vació no creará log
     @r5.program.gen.ventas="ftt.r5.ex.ventas.dkl" //herramienta que realiza las exportaciones de ventas
     @r5.path.outfile="transactions"//ruta donde se almacenaran los archivos con las ventas exportadas
     @r5.file.extension=".fttjson" //extension del archivo
-
+    @r5.documentos="6" //tipos de documentos de la ventas que seran exportados/importados, separados por coma,vacio seria todos los documentos
+    @r5.dnms_ord=@true
+    @r5.delete.file.onsuccess=@false // si es true el archivo de transación es elimida despues de tener exito de importacion
     //1.- Obetener los args
     ref args=commandline("=")
     if trim(@@(args,"$qn"))==""{do rise_error(99,"No ha indicado el parámetro 'qn' (Nombre cualificado a una conexión) ")}
@@ -21,6 +24,7 @@ program ""
     if trim(@@(args,"$uid"))==""{do rise_error(99,"No ha indicado el parámetro 'uid' (usuario)")}
     if trim(@@(args,"$pwd"))==""{do rise_error(99,"No ha indicado el parámetro 'pwd' (contraseña del usuario)")}
 
+    if not(field.exist(args,"dmns_ord")){args<"dmns_ord">:@r5.dnms_ord}
     //variables globales
     @qname=trim(@@(args,"$qn"))
     @uid=trim(@@(args,"$uid"))
@@ -36,11 +40,15 @@ program ""
     do SendDataServicePending(db,args)
 
     //2.- Generar nuevas atransaciones
+    dmns_ord=parse.bool(@@(args,"dmns_ord"))
+    if dmns_ord{dmns_ord=TableExist(db,"orden")}
+
     new transacion
     {
-        // @"id":uuid()
         @"fecha":trim(@@(args,"$i"))
         @"ubicacion":trim(@@(args,"$ub"))
+        @"dmns_ord":dmns_ord
+        @"documentos":@r5.documentos
     }
     do GenTransAndRegister(db,@qname,transacion)
 
@@ -64,4 +72,6 @@ program ""
             }
         }
     }
+
+    do SaveLog(@PathLog)
 }

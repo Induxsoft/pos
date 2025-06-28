@@ -170,17 +170,20 @@ module "Consultas para la exportación"
     INNER JOIN grupoproductos gp ON iv.grupo=gp.sys_pk
     INNER JOIN cimpadicionales ad ON iv.padicional=ad.id
     INNER JOIN producto p ON iv.fk_producto_ivariables=p.sys_pk
-    LEFT JOIN grupoproductos_cconsumo_ gpcc ON gp.sys_pk=gpcc.igrupoproducto
-    LEFT JOIN cconsumo cc ON gpcc.iconsumo=cc.sys_pk
-    WHERE if(IFNULL(@ubicacion,0)=0,TRUE,cc.ubicacion=@ubicacion)"
+    INNER JOIN linea l ON p.ilinea=l.sys_pk
+        LEFT JOIN ut_cc_linea ccl ON l.sys_pk=ccl.uf_ilinea
+        LEFT JOIN cconsumo cc ON ccl.uf_icc=cc.sys_pk
+    WHERE if(IFNULL(@ubicacion,0)=0,TRUE,cc.ubicacion=@ubicacion);"
 
-    @list_gruposproductos="SELECT gp.sys_pk,gp.comision1,
+    @list_gruposproductos="SELECT DISTINCT gp.sys_pk,gp.comision1,
     gp.comision2,gp.comision3,
     gp.comision4,gp.comision5,gp.nombre,gp.notas,gp.tasa_iva
     FROM grupoproductos gp
     INNER JOIN ivariable iv ON iv.grupo=gp.sys_pk
-    LEFT JOIN grupoproductos_cconsumo_ gpcc ON gp.sys_pk=gpcc.igrupoproducto
-    LEFT JOIN cconsumo cc ON gpcc.iconsumo=cc.sys_pk
+     INNER JOIN producto p ON iv.fk_producto_ivariables=p.sys_pk
+    INNER JOIN linea l ON p.ilinea=l.sys_pk
+	LEFT JOIN ut_cc_linea ccl ON l.sys_pk=ccl.uf_ilinea
+	LEFT JOIN cconsumo cc ON ccl.uf_icc=cc.sys_pk
     WHERE if(IFNULL(@ubicacion,0)=0,TRUE,cc.ubicacion=@ubicacion);"
 
     @list_ensamble="select ie.sys_pk,ie.sys_guid,cantdemasiado,cantidad,
@@ -213,4 +216,13 @@ module "Consultas para la exportación"
     FROM blockdocumentos b
     INNER JOIN cdocumentos cd ON b.documento=cd.id
     WHERE (IFNULL(@ubicacion,0)=0 OR b.ubicacion=@ubicacion)"
+
+    @list_join_grupos_productos="select p.codigo iproductos,gp.nombre igrupos
+    from grupoproductos_producto_ g
+    inner join producto p on g.iproductos=p.sys_pk
+    inner join grupoproductos gp on g.igrupos=gp.sys_pk
+    inner join linea l on p.ilinea=l.sys_pk
+    left join ut_cc_linea ccl on l.sys_pk=ccl.uf_ilinea
+    left join cconsumo cc on ccl.uf_icc=cc.sys_pk
+    where if(ifnull(@ubicacion,0)=0,true,cc.ubicacion=@ubicacion)"
 }

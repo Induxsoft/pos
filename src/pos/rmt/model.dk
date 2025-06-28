@@ -67,7 +67,7 @@ module ""
             @"foliosdocumentos*":dbr.list(db,ftext(@list_folios_documentos),entity)
             @"block_documentos*":dbr.list(db,ftext(@list_block_documentos),entity)
         }
-        
+
         if TableExist(db,"cproduccion_producto_")
         {
             data_export<"cproducionproductos*">:dbr.list(db,ftext(@list_cproducion_productos),entity)
@@ -78,6 +78,7 @@ module ""
             {
                 @"grupoproductos*":dbr.list(db,ftext(@list_gruposproductos),entity)
                 @"variables*":dbr.list(db,ftext(@list_variables),entity)
+                @"grupoproductos_producto*":dbr.list(db,ftext(@list_join_grupos_productos),entity)
             }
         }
 

@@ -29,28 +29,27 @@ module ""
             {
                 member "Venta"
                 {
-                        @"target":"Venta"
-                        @"identity":"sys_guid=@sys_guid;"
-                        @"insert":"*"
-                        @"row_in_transaction":@true // solo puede ver una transaccion, como ya hay una en venta no puede ver otra en foliosdocumentos, ni en dventa
-                                                    // si hubiera una transaccion en  foliosdocumentos, no podria ver otra en venta ni dventa
-                                                    //motivo, podria ocacionar un bucles de transaccion o hacer el commit en momento donde no se debe
-                                                    //igual sucederia con los otros elementos
-                        member @"queryfields" 
-                        {
-                            @"ICliente":"select sys_pk from cliente where codigo=@icliente;" 
-                            @"IFolio":"select sys_pk from foliosdocumentos where sys_guid=@Ifolio;"
-                            @"ICConsumo":"select sys_pk from cconsumo where codigo=@ICConsumo;"
-                            @"IAgente":"select sys_pk from agente where codigo=@IAgente;"
-                            @"ICaja":"select sys_pk from caja where codigo=@ICaja;"
-                            @"IDivisa":"select sys_pk from Divisa where codigo=@IDivisa;"
-                            @"IMovcaja":"select sys_pk from movcaja where sys_guid=@IMovcaja;"
-                            @"IPorteador":"select sys_pk from porteador where codigo=@IPorteador;"
-                            @"IRepartidor":"select sys_pk from repartidor where codigo=@IRepartidor;"
-                            @"ICorte":"select sys_pk from corte where Sys_guid=@ICorte;"
-                            @"AplicadoA":"select sys_pk from venta where Sys_guid=@AplicadoA;"
-                        }
-                        
+                    @"target":"Venta"
+                    @"identity":"sys_guid=@sys_guid;"
+                    @"insert":"*"
+                    @"row_in_transaction":@true // solo puede ver una transaccion, como ya hay una en venta no puede ver otra en foliosdocumentos, ni en dventa
+                                                // si hubiera una transaccion en  foliosdocumentos, no podria ver otra en venta ni dventa
+                                                //motivo, podria ocacionar un bucles de transaccion o hacer el commit en momento donde no se debe
+                                                //igual sucederia con los otros elementos
+                    member @"queryfields" 
+                    {
+                        @"ICliente":"select sys_pk from cliente where codigo=@icliente;" 
+                        @"IFolio":"select sys_pk from foliosdocumentos where sys_guid=@Ifolio;"
+                        @"ICConsumo":"select sys_pk from cconsumo where codigo=@ICConsumo;"
+                        @"IAgente":"select sys_pk from agente where codigo=@IAgente;"
+                        @"ICaja":"select sys_pk from caja where codigo=@ICaja;"
+                        @"IDivisa":"select sys_pk from Divisa where codigo=@IDivisa;"
+                        @"IMovcaja":"select sys_pk from movcaja where sys_guid=@IMovcaja;"
+                        @"IPorteador":"select sys_pk from porteador where codigo=@IPorteador;"
+                        @"IRepartidor":"select sys_pk from repartidor where codigo=@IRepartidor;"
+                        @"ICorte":"select sys_pk from corte where Sys_guid=@ICorte;"
+                        @"AplicadoA":"select sys_pk from venta where Sys_guid=@AplicadoA;"
+                    } 
                     member @"childs"
                     {
                         member "DVenta"
@@ -84,6 +83,63 @@ module ""
                     }   //También podría tener sus propias sub-consultas           
                 } // Venta
             } //member   
-        } //FoliosDocumentos          
+        } //FoliosDocumentos    
+        member @"orden"
+        {
+            @"target":"orden"
+            @"identity":"sys_guid=@sys_guid;"
+            @"insert":"*"
+            @"row_in_transaction":@true 
+            member @"queryfields" 
+            {
+                @"iagente":"select sys_pk from agente where codigo=@iagente"
+                @"status":"select id from cstatusordenproduccion where const=@status"
+                @"icconsumo":"select sys_pk from cconsumo where codigo=@icconsumo"
+                @"icproduccion":"select sys_pk from cproduccion where codigo=@icproduccion"
+                @"idivisa":"select sys_pk from divisa where codigo=@idivisa"
+                @"iventa":"select sys_pk from venta where referencia=@iventa"
+            }
+            member @"childs"
+            {
+                member "dorden"
+                {
+                    @"target":"dorden"
+                    @"identity":"sys_guid=@sys_guid;"
+                    @"insert":"*"
+                    member @"queryfields" 
+                    {
+                        @"idivisa":"select sys_pk from divisa where codigo=@idivisa"
+                        @"iproducto":"select sys_pk from producto where codigo=@iproducto;"
+                        @"fk_orden_detalle":"select sys_pk from orden where referencia=@fk_orden_detalle"
+                    }
+                    member "childs"
+                    {
+                        member @"dadicionales"
+                        {
+                            @"target":"dadicionales"
+                            @"identity":"sys_guid=@sys_guid;"
+                            @"insert":"*"
+                            member @"queryfields" 
+                            {
+                                @"iproducto":"select sys_pk from producto where codigo=@iproducto;"
+                                @"fk_dorden_adicionales":"select sys_pk from dorden where sys_guid=@fk_dorden_adicionales"
+                            }
+                        }
+                        member @"dcantidades"
+                        {
+                            @"target":"dcantidades"
+                            @"identity":"sys_guid=@sys_guid;"
+                            @"insert":"*"
+                            member @"queryfields" 
+                            {
+                                @"cantidad":"select id from ccantidades where const=@cantidad"
+                                @"iproducto":"select sys_pk from producto where codigo=@iproducto;"
+                                @"fk_dorden_cantidadesvariadas":"select sys_pk from dorden where sys_guid=@fk_dorden_cantidadesvariadas"
+                            }
+                        }
+                    }
+                }
+            }
+        }      
     }
 }

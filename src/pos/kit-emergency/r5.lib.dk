@@ -83,6 +83,8 @@ module ""
  
 
     @__delfields="sys_pk,sys_guid,sys_deleted"
+    @r5.prod_not_inventabiable=@true
+    @r5.id_not_inventariable= 0
     //Función global
     //Inicio de la importación
     //db - Referecia a una conexión a una base de datos
@@ -182,7 +184,6 @@ module ""
         for i = 0; i < @count(productos)
         {
             ref producto=@item(productos,i)
-            
             producto<"uf_inhabilitado">:@@(producto,"#uf_inhabilitado")
 
             do DeleteFields(producto,@__delfields)
@@ -212,6 +213,7 @@ module ""
             do clave_codigo_explicit(db,producto, "proveedor3","proveedor","codigo")
             do clave_codigo_explicit(db,producto, "impuestos","cfgimpuesto","nombre")
             
+            if @r5.prod_not_inventabiable{producto<"tipo">:@r5.id_not_inventariable}
             //Reemplazar alias conocidos
             ref producto:record.copyexin(producto,@null,"*","",@__alias_columnas,":")
             
@@ -261,7 +263,6 @@ module ""
         }
         
         //quitar hasta aqui
-
         new res
         {
             @"_field":"codigo"
@@ -507,6 +508,49 @@ module ""
         return res
     }
 
+    #!
+    ValidateGrupoProdsProducto::&db,&data,&row,table,index
+    {
+        _text="Producto: "+@@(row,"$iproductos")+" Grupo: "+@@(row,"$igrupos")
+
+        id_producto=obtener_clave(db,"producto","codigo",@@(row,"$iproductos"))
+        id_grupo=obtener_clave(db,"grupoproductos","nombre",@@(row,"$igrupos"))
+
+        if id_producto < 1{do rise_error(99,"No se encontró el producto: "+@@(row,"$producto"))}
+        if id_grupo < 1{do rise_error(99,"No se encontró el grupo: "+@@(row,"$igrupos"))}
+
+        using row
+        {
+            @"iproductos":id_producto
+            @"igrupos":id_grupo
+        }
+
+        pk_exist=dbr.num(db,"select sys_pk from grupoproductos_producto_ where iproductos=@iproductos and igrupos=@igrupos",row)
+
+        new res
+        {
+            @"id":pk_exist
+            @"_text":_text
+        }
+        do DeleteFields(row,"producto,cproduccion")
+
+        if pk_exist > 0
+        {
+            res<"conditional">:"sys_pk=@id"
+        }
+        else 
+        {
+            //realizamos la inserción ya que en la funcion default_r5_entity, devuelve el campo sys_dtcreated y la tabla de la entidad no la contiene
+            ref new_row:default_r5_entity()
+            do DeleteFields(new_row,"sys_dtcreated,sys_guid,sys_dtexported")
+            do CopyRecord(row,new_row)
+            do dbr.insert(db,table,row)
+            do PrintLog(" - "+table+" "+_text+" insertado")
+
+            res<"continue">:@true
+        }
+        return res
+    }
     //////////////ENVIO DE DATOS////////////
     
     module "Funciones de envio de datos "
@@ -516,66 +560,60 @@ module ""
         @r5.file.extension=".fttjson"
         @r5.url.service=""
         @r5.limit_query= 50
+        @r5.documentos=""
+        @r5.delete.file.onsuccess=@false
+
         GenTransAndRegister::&db,qname,&data
         {
             do dir.ensure(@r5.path.outfile)
             
             do PrintLog("===== Generando nuevas transacciones ====")
 
-            do dbr.execute(db,"update  foliosdocumentos f 
+            documentos="true"
+            if trim(@@(data,"$documentos"))!=""{documentos=dbr.logicexp_from_list(trim(@@(data,"$documentos")),"v.documento=","OR","(",")")}
+
+            do dbr.execute(db,ftext("update  foliosdocumentos f 
             inner join blockdocumentos bk on f.block=bk.sys_pk
             inner join venta v on f.sys_pk=v.ifolio
             inner join corte c on v.icorte=c.sys_pk
             set f.sys_exported=0,f.sys_dtexported=null,v.sys_exported=0,v.sys_dtexported=null,c.sys_exported=0,c.sys_dtexported=null
-            where 
-            ifnull(v.sys_exported,0)=0
-            AND if(IFNULL(@fecha,'')='',TRUE,DATE(v.fecha)>=DATE(@fecha)) ;",data)
-            //entre 50 porque 
+            where ifnull(v.sys_exported,0)=0
+            AND #<documentos>
+            AND if(IFNULL(@fecha,'')='',TRUE,DATE(v.fecha)>=DATE(@fecha)) ;"),data)
+            //entre 50 porque, ventas
             rows=dbr.num(db,ftext("SELECT COUNT(*)/#<@r5.limit_query> FROM venta v
-                        WHERE 
-                        ifnull(v.Sys_Exported,0)=0
-                        AND if(IFNULL(@fecha,'')='',TRUE,DATE(v.fecha)=DATE(@fecha) )
+                        WHERE ifnull(v.sys_exported,0)=0
+                        AND #<documentos>
+                        AND if(IFNULL(@fecha,'')='',TRUE,DATE(v.fecha)>=DATE(@fecha) )
                         ;"),data)
+            
+            rows_ord= 0
+            if parse.bool(@@(data,"dmns_ord"))
+            {
+                rows_ord=dbr.num(db,ftext("select count(*)/#<@r5.limit_query> 
+                        from orden o 
+                        inner join venta v on o.iventa=v.sys_pk
+                        where "+documentos+"
+                        and ifnull(o.sys_exported,0)=0
+                        and if(ifnull(@fecha,'')='',true,date(o.fecha)>=date(@fecha) )
+                        ;"),data)
+            }
+            
+            rows=rows +  rows_ord
             
             ref lrows=split(str(rows),".")
             
-            if @count(lrows)>1
+            if @count(lrows) > 1
             {
                 segparte=list.str(lrows,1)
                 if parse.num(segparte) > 0{rows=trun(rows) + 1}
             }
+
             ref transaccciones=list.create()
 
             for i = 0; i < rows
             {
-                id=uuid()
-                path_file=path.concat(@r5.path.outfile,id+@r5.file.extension)
-                
-                new import_context
-                {
-                    @"dbqn":qname
-                    @"outfile":path_file
-                    @"fecha":trim(@@(data,"$fecha"))
-                    @"limit":@r5.limit_query
-                }
-                res=runscript(@r5.program.gen.ventas,"import_context",import_context)
-                
-                new pos_datapack
-                {
-                    @"sys_guid":uuid()
-                    @"sys_timestamp*":dbr.sql("now()")
-                    @"sys_dtcreated*":dbr.sql("now()")
-                    @"sys_recver":0
-                    @"id":id
-                    @"location_id":@@(data,"$ubicacion")
-                    @"processed":@@(data,"#processed")
-                    @"error":@@(data,"$error")
-                    @"sended":@@(data,"#sended")
-                }
-
-                do dbr.insert(db,"pos_datapack",pos_datapack)
-                // do PrintLog(replace(trim(res),"\n",""))cls
-                do PrintLog("===== Transacción: "+id+" generado correctamente ====")
+                ref pos_datapack=CreatePosData(db,data,qname)
                 
                 do list.add(transaccciones,pos_datapack)
                 do PrintLog("")
@@ -586,6 +624,40 @@ module ""
                 }
             }
             return transaccciones
+        }
+
+        CreatePosData::&db,&data,qname
+        {
+            id=uuid()
+            path_file=path.concat(@r5.path.outfile,id+@r5.file.extension)
+            
+            new import_context
+            {
+                @"dbqn":qname
+                @"outfile":path_file
+                @"fecha":trim(@@(data,"$fecha"))
+                @"limit":@r5.limit_query
+                @"dmns_ord":parse.bool(@@(data,"dmns_ord"))
+            }
+            res=runscript(@r5.program.gen.ventas,"import_context",import_context)
+            
+            new pos_datapack
+            {
+                @"sys_guid":uuid()
+                @"sys_timestamp*":dbr.sql("now()")
+                @"sys_dtcreated*":dbr.sql("now()")
+                @"sys_recver":0
+                @"id":id
+                @"location_id":@@(data,"$ubicacion")
+                @"processed":@@(data,"#processed")
+                @"error":@@(data,"$error")
+                @"sended":@@(data,"#sended")
+            }
+
+            do dbr.insert(db,"pos_datapack",pos_datapack)
+            do PrintLog("===== Transacción: "+id+" generado correctamente ====")
+
+            return pos_datapack
         }
 
         UpdateTrasaction::&db,&data,id
@@ -617,7 +689,11 @@ module ""
         SendDataService::&db,&h,&trans
         {
             path_file=path.concat(@r5.path.outfile,@@(trans,"$id")+@r5.file.extension)
-            if not(file.exists(path_file)){return}
+            if not(file.exists(path_file))
+            {
+                do PrintLog("***No existe el archivo en:"+path_file )
+                return
+            }
 
             trans<"data*">:from.json(file.rtext(path_file))
 
@@ -641,6 +717,11 @@ module ""
             do UpdateTrasaction(db,t,@@(trans,"$id"))
 
             do PrintLog("*** Transación: "+@@(trans,"$id")+" importado correctamente ***")
+            if @r5.delete.file.onsuccess
+            {
+                do PrintLog("*** Eliminando archivo: "+path_file)
+                do file.delete(path_file)
+            }
             do PrintLog("")
             
             exception
@@ -700,5 +781,6 @@ module ""
 
             return dbr.execute(db,sql_table,@null)
         }
+        
     }
 }

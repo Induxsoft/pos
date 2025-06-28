@@ -11,6 +11,9 @@ program ""
     
     @PathLog=""
     @hide_productos=@true
+    @r5.prod_not_inventabiable=@true //si es true coloca a todos los productos como no inventariable, false deja al prodcuto como viene del servicio
+    @r5.id_not_inventariable= 1 //ctipoproducto id no inventariable de la tabla ctipoproducto
+
     //1.- Obetener los args
     ref args=commandline("=")
     if trim(@@(args,"$qn"))==""{do rise_error(99,"No ha indicado el parámetro 'qn' (Nombre cualificado a una conexión) ")}
@@ -34,8 +37,6 @@ program ""
     ref h=GetHeaders(@uid,@pwd)
     new data
     {
-        // @"uid":@uid
-        // @"pwd":@pwd
         @"ub":trim(@@(args,"$ub"))
     }
     
@@ -78,6 +79,7 @@ program ""
     ref cproducionproductos=@("&cproducionproductos")
     ref block_documentos=@("&block_documentos")
     ref foliosdocumentos=@("&foliosdocumentos")
+    ref grupoproductos_producto=@("&grupoproductos_producto")
 
     if isnull(ubicacion)
     {
@@ -216,6 +218,11 @@ program ""
     do PrintLog("====Importar productos - centro de produción : "+str(@count(cproducionproductos))+" ====")
     point @function_validate to ValidateCprodProducto
     do Importar.data(db,cproducionproductos,"cproduccion_producto_",@function_validate)
+
+    do PrintLog("\n")
+    do PrintLog("====Importar grupo de productos - producto : "+str(@count(grupoproductos_producto))+" ====")
+    point @function_validate to ValidateGrupoProdsProducto
+    do Importar.data(db,grupoproductos_producto,"grupoproductos_producto_",@function_validate)
 
     do PrintLog("\n")
     do PrintLog("***** ===== Proceso terminado correctamente ===== *****")
