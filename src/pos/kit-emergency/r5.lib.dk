@@ -504,6 +504,8 @@ module ""
         {
             res<"conditional">:"folio=@folio and block=@block"
         }
+        
+        do dbr.execute(db,"update blockdocumentos set fultimo=(SELECT ifnull(MAX(f.folio),0) FROM foliosdocumentos f WHERE f.`Block`=@block) where sys_pk=@block",row)
 
         return res
     }
@@ -551,9 +553,15 @@ module ""
         }
         return res
     }
+    #!
+    ValidateAlmacen::&db,&data,&row,table,index
+    {
+        if trim(@@(row,"$uf_inhabilitado"))==""{row<"uf_inhabilitado">:0}
+        // if trim(@@(row,"$uf_fechainhabilitacion"))==""{row<"uf_fechainhabilitacion*">:dbr.sql("now()")}
+    }
     //////////////ENVIO DE DATOS////////////
     
-    module "Funciones de envio de datos "
+    module "Funciones de envio de datos"
     {
         @r5.program.gen.ventas="ftt.r5.ex.ventas.dkl"
         @r5.path.outfile="transactions"
@@ -562,6 +570,7 @@ module ""
         @r5.limit_query= 50
         @r5.documentos=""
         @r5.delete.file.onsuccess=@false
+        @r5.StatusAdministrativo="3"
 
         GenTransAndRegister::&db,qname,&data
         {
@@ -570,8 +579,11 @@ module ""
             do PrintLog("===== Generando nuevas transacciones ====")
 
             documentos="true"
+            status="true"
             if trim(@@(data,"$documentos"))!=""{documentos=dbr.logicexp_from_list(trim(@@(data,"$documentos")),"v.documento=","OR","(",")")}
+            if trim(@@(data,"$status"))!=""{status=dbr.logicexp_from_list(trim(@@(data,"$status")),"v.StatusAdministrativo=","OR","(",")")}
 
+            //restablecer sys_exported, si este tiene ventas pendientes restantes de un corte
             do dbr.execute(db,ftext("update  foliosdocumentos f 
             inner join blockdocumentos bk on f.block=bk.sys_pk
             inner join venta v on f.sys_pk=v.ifolio
@@ -579,11 +591,13 @@ module ""
             set f.sys_exported=0,f.sys_dtexported=null,v.sys_exported=0,v.sys_dtexported=null,c.sys_exported=0,c.sys_dtexported=null
             where ifnull(v.sys_exported,0)=0
             AND #<documentos>
+            AND #<status>
             AND if(IFNULL(@fecha,'')='',TRUE,DATE(v.fecha)>=DATE(@fecha)) ;"),data)
             //entre 50 porque, ventas
             rows=dbr.num(db,ftext("SELECT COUNT(*)/#<@r5.limit_query> FROM venta v
                         WHERE ifnull(v.sys_exported,0)=0
                         AND #<documentos>
+                        AND #<status>
                         AND if(IFNULL(@fecha,'')='',TRUE,DATE(v.fecha)>=DATE(@fecha) )
                         ;"),data)
             
@@ -593,7 +607,8 @@ module ""
                 rows_ord=dbr.num(db,ftext("select count(*)/#<@r5.limit_query> 
                         from orden o 
                         inner join venta v on o.iventa=v.sys_pk
-                        where "+documentos+"
+                        where #<documentos>
+                        AND #<status>
                         and ifnull(o.sys_exported,0)=0
                         and if(ifnull(@fecha,'')='',true,date(o.fecha)>=date(@fecha) )
                         ;"),data)

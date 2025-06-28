@@ -21,6 +21,7 @@ module ""
             @"target":"foliosdocumentos"
             @"identity":"sys_guid=@sys_guid;"
             @"insert":"*"
+            @"after":"update blockdocumentos set fultimo=(SELECT ifnull(MAX(f.folio),0) FROM foliosdocumentos f WHERE f.`Block`=@block) where sys_pk=@block"
             member @"queryfields" 
             {
                 @"Block":"select sys_pk from blockdocumentos where concat(documento,'-',serie)=@Block;" 

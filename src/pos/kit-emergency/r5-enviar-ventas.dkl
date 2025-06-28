@@ -17,6 +17,8 @@ program ""
     @r5.documentos="6" //tipos de documentos de la ventas que seran exportados/importados, separados por coma,vacio seria todos los documentos
     @r5.dnms_ord=@true
     @r5.delete.file.onsuccess=@false // si es true el archivo de transación es elimida despues de tener exito de importacion
+    @r5.StatusAdministrativo="3" //estados en la cual se exportaran las ventas, 3- solo procesados
+
     //1.- Obetener los args
     ref args=commandline("=")
     if trim(@@(args,"$qn"))==""{do rise_error(99,"No ha indicado el parámetro 'qn' (Nombre cualificado a una conexión) ")}
@@ -49,7 +51,9 @@ program ""
         @"ubicacion":trim(@@(args,"$ub"))
         @"dmns_ord":dmns_ord
         @"documentos":@r5.documentos
+        @"status":@r5.StatusAdministrativo
     }
+
     do GenTransAndRegister(db,@qname,transacion)
 
     //3.- enviar transaciones nuevas

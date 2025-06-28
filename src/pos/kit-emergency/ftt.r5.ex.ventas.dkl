@@ -9,6 +9,7 @@ program "ejemplo-exportar ftt"
     #include "ftt.r5.cmd.dkl"
 
     documentos="true"
+    status="true"
     if not(field.exist(cmd_args,"outfile") || field.exist(cmd_args,"outpath"))
     {
         do print("Parámetros insuficientes")
@@ -16,7 +17,9 @@ program "ejemplo-exportar ftt"
     }
     fecha=trim(@@(cmd_args,"$fecha"))
     limit=ifstr(@@(cmd_args,"#limit")>0,"Limit "+@@(cmd_args,"$limit"),"")
+
     if trim(@@(cmd_args,"$documentos"))!=""{documentos=dbr.logicexp_from_list(trim(@@(cmd_args,"$documentos")),"v.documento=","OR","(",")")}
+    if trim(@@(cmd_args,"$status"))!=""{status=dbr.logicexp_from_list(trim(@@(cmd_args,"$status")),"v.StatusAdministrativo=","OR","(",")")}
 
     new config_export 
     {
@@ -44,6 +47,7 @@ program "ejemplo-exportar ftt"
             where 
             if(IFNULL('"+fecha+"','')='',TRUE,DATE(v.fecha)>=DATE('"+fecha+"') )
             AND "+documentos+"
+            AND "+status+"
             AND not ifnull(f.sys_exported,0) or f.sys_dtexported<f.sys_timestamp order by f.sys_pk
             "+limit+";"                  // Consula SQL de datos REQUERIDO
             //@"on_begin":"update, insert o delete"   // Consulta SQL que se ejecutará por cada fila de 'source' antes de generar el JSON (OPCIONAL)
@@ -96,7 +100,6 @@ program "ejemplo-exportar ftt"
                             inner join producto pr on dv.IProducto=pr.sys_pk
                             inner join almacen a on dv.IAlmacen=a.sys_pk 
                             where v.sys_guid=@sys_guid;"      // Esta consulta se ejecuta, tiene disponibles los valores de los campos de la transacción padre como parámetros
-                                
                         } // DVenta
                         member "movcaja"
                         {
@@ -111,7 +114,6 @@ program "ejemplo-exportar ftt"
                             left join corte co on mc.ICorte=co.sys_pk
                             left join divisa dvi on mc.IDivisa=dvi.sys_pk  
                             where v.sys_guid=@sys_guid;"      // Esta consulta se ejecuta, tiene disponibles los valores de los campos de la transacción padre como parámetros
-                                
                         } // movcaja
                     }   //También podría tener sus propias sub-consultas           
                 } // Venta
@@ -145,6 +147,7 @@ program "ejemplo-exportar ftt"
                             left join divisa d on o.idivisa=d.sys_pk
                             left join venta v on o.iventa=v.sys_pk
                             where "+documentos+"
+                            AND "+status+"
                             AND if(IFNULL('"+fecha+"','')='',TRUE,DATE(o.fecha)>=DATE('"+fecha+"') )
                             AND not ifnull(o.sys_exported,0) 
                             or o.sys_dtexported<o.sys_timestamp 

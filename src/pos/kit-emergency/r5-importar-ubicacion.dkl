@@ -129,7 +129,8 @@ program ""
 
     do PrintLog("\n")
     do PrintLog("====Importar almacenes: "+str(@count(almacenes))+" ====")
-    do Importar.data(db,almacenes,"almacen",@null)
+    point @function_validate to ValidateAlmacen
+    do Importar.data(db,almacenes,"almacen",@function_validate)
 
     do PrintLog("\n")
     do PrintLog("====Importar configuración de impuestos: "+str(@count(cfgimpuestos))+" ====")
