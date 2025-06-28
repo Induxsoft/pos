@@ -2,6 +2,23 @@
 #!
 module "ftt.export"
 {
+    #!
+    //Genera una expresión lógica con base en una lista de valores
+    dbr.logicexp_from_list::str, termino, op,prefix, sufix
+    {
+        sql=""
+        ref l=split(str,",")
+        for i=0;i<@count(l)
+        {
+            if sql=="" { sql=termino + list.str(l,i) }
+            else { sql=sql+" "+op + " " + termino + list.str(l,i) }
+        }
+        sql=trim(sql)
+        if sql!="" { sql=prefix+" " + sql + " " + sufix + " "}
+
+        return sql
+    }
+    
     //Devuelve un nuevo registro con la unión de params y row agregando prefix a los campos de row
     #!
     dbr.ftt.merge_params:: &params, prefix, &row
