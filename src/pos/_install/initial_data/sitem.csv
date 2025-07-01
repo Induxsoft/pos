@@ -19,3 +19,4 @@ VP40,Consulta de cortes por caja,pos
 vp41,Consulta de movimiento de caja por caja y cajero,pos
 pos.exportar,"Exportar datos POS",pos
 VP50,"Exportar datos POS",pos.exportar
+VP51,"Importar datos POS",pos.exportar

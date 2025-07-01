@@ -19,7 +19,7 @@ module ""
         member @"foliosdocumentos"
         {
             @"target":"foliosdocumentos"
-            @"identity":"sys_guid=@sys_guid;"
+            @"identity":"sys_guid=@sys_guid or (folio=@folio and block=@block);"
             @"insert":"*"
             @"after":"update blockdocumentos set fultimo=(SELECT ifnull(MAX(f.folio),0) FROM foliosdocumentos f WHERE f.`Block`=@block) where sys_pk=@block"
             member @"queryfields" 
@@ -99,6 +99,7 @@ module ""
                 @"icproduccion":"select sys_pk from cproduccion where codigo=@icproduccion"
                 @"idivisa":"select sys_pk from divisa where codigo=@idivisa"
                 @"iventa":"select sys_pk from venta where referencia=@iventa"
+                @"status":"SELECT if(v.StatusAdministrativo=3,3,@status) FROM venta v WHERE (v.sys_pk=@iventa or v.referencia=@iventa)"
             }
             member @"childs"
             {

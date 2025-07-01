@@ -225,4 +225,12 @@ module "Consultas para la exportación"
     left join ut_cc_linea ccl on l.sys_pk=ccl.uf_ilinea
     left join cconsumo cc on ccl.uf_icc=cc.sys_pk
     where if(ifnull(@ubicacion,0)=0,true,cc.ubicacion=@ubicacion)"
+
+    @list_cconsumo_cproduccion="SELECT 
+	cc.codigo iconsumo  ,
+	cp.codigo icproduccion
+	FROM cconsumo_cproduccion_ ccp
+	INNER JOIN cconsumo cc ON ccp.iconsumo=cc.sys_pk
+	INNER JOIN cproduccion  cp ON ccp.icproduccion=cp.sys_pk
+	WHERE (IFNULL(@ubicacion,'')='' OR cc.ubicacion=@ubicacion)"
 }

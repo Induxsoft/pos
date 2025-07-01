@@ -64,10 +64,14 @@ module ""
             @"productos_elementos*":list.create()
             @"productos_remplazos*":list.create()
             @"cproducionproductos*":list.create()
+            @"cconsumo_cproduccion*":list.create()
             @"foliosdocumentos*":dbr.list(db,ftext(@list_folios_documentos),entity)
             @"block_documentos*":dbr.list(db,ftext(@list_block_documentos),entity)
         }
-
+        if TableExist(db,"cconsumo_cproduccion_")
+        {
+            data_export<"cconsumo_cproduccion*">:dbr.list(db,ftext(@list_cconsumo_cproduccion),entity)
+        }
         if TableExist(db,"cproduccion_producto_")
         {
             data_export<"cproducionproductos*">:dbr.list(db,ftext(@list_cproducion_productos),entity)
@@ -116,6 +120,7 @@ module ""
             @"c-venta":cventa
         }
         @erp.dprod.CLASES="2,4,5,6" 
+        @erp.dprod.TIPOS_PRODUCTOS_SALIDA_VENTAS="2"
         @dias_ventas=field.dnum(args,"dias-ventas",7) //dias-ventas=n. Cantidad de días atrás (n) a tomar en cuenta como máximo de la lista de ventas pendientes.
         @limit_ventas=field.dnum(args,"limit-ventas",100)//limit-ventas=l. Cantidad de filas (l) a tomar en cuenta como máximo de la lista de ventas pendientes.
         @cat_prod_ventas=field.dnum(args,"c-venta",8) //Clave primaria de la categoría para salida por ventas
@@ -130,7 +135,7 @@ module ""
     Importar::&db,&params
     {
         ref @LAST_DCARDEX=@null
-        do dbr.apps.action.grant("VP50")
+        do dbr.apps.action.grant("VP51")
         do errordet(@false)
         id=trim(@@(params,"$id"))   
         do PrepareGlobalVars(db)
@@ -143,6 +148,8 @@ module ""
         do CreatePosData(db,pos_datapack)
 
         ref data=@@(params,"&data")
+        if isnull(data){do rise_error(500,"El objeto `data` es nulo")}
+        
         do dbr.ftt.import(db,data,@config_import)
 
         new pos_datapack
