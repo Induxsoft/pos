@@ -115,7 +115,7 @@ module "Consultas para la exportación"
     from caja where (ifnull(@ubicacion,'')='' or ubicacion=@ubicacion)"
 
     @list_cajeros="select #<@_system_fileds>,codigo,codnomina,contrasena,
-    email,nombre,notas,telefono,domicilio1,uf_sys_baja 
+    email,nombre,notas,telefono,uf_sys_baja 
     from cajero where (ifnull(@ubicacion,'')='' or ubicacion=@ubicacion)"
 
     @list_agentes="select #<@_system_fileds>,codigo,codnomina,

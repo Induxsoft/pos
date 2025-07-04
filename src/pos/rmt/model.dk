@@ -24,7 +24,7 @@ module ""
         ref entity= dbr.rec(db,ftext(@list_ubicaciones),params)
         
         ref cconsumos=dbr.list(db,ftext(@list_cconsumo),entity)
-        ref cproducciones=dbr.list(db,ftext(@list_cproducion),entity)
+        
         ref lineas=dbr.list(db,ftext(@list_lineas_rel),entity)
         ref productos=dbr.list(db,ftext(@list_productos_rel),entity)
         if @count(lineas)<1{ref lineas=dbr.list(db,ftext(@list_lineas),params)}
@@ -44,7 +44,7 @@ module ""
             @"ubicacion*":entity
             @"divisas*":dbr.list(db,ftext(@list_divisas),params)
             @"cconsumo*":cconsumos
-            @"cproduccion*":cproducciones
+            @"cproduccion*":list.create()
             @"cajas*":dbr.list(db,ftext(@list_cajas),entity)
             @"cajeros*":dbr.list(db,ftext(@list_cajeros),entity)
             @"agentes*":dbr.list(db,ftext(@list_agentes),entity)
@@ -68,6 +68,13 @@ module ""
             @"foliosdocumentos*":dbr.list(db,ftext(@list_folios_documentos),entity)
             @"block_documentos*":dbr.list(db,ftext(@list_block_documentos),entity)
         }
+        if TableExist(db,"cproduccion")
+        {
+            using data_export
+            {
+                @"cproduccion*":dbr.list(db,ftext(@list_cproducion),entity)
+            }
+        }
         if TableExist(db,"cconsumo_cproduccion_")
         {
             data_export<"cconsumo_cproduccion*">:dbr.list(db,ftext(@list_cconsumo_cproduccion),entity)
@@ -76,13 +83,17 @@ module ""
         {
             data_export<"cproducionproductos*">:dbr.list(db,ftext(@list_cproducion_productos),entity)
         }
-        if TableExist(db,"ivariable")
+        if TableExist(db,"ivariable") 
         {
             using data_export
             {
                 @"grupoproductos*":dbr.list(db,ftext(@list_gruposproductos),entity)
-                @"variables*":dbr.list(db,ftext(@list_variables),entity)
                 @"grupoproductos_producto*":dbr.list(db,ftext(@list_join_grupos_productos),entity)
+            }
+
+            if TableExist(db,"cimpadicionales")
+            {
+                data_export<"variables*">:dbr.list(db,ftext(@list_variables),entity)
             }
         }
 
