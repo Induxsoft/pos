@@ -65,7 +65,7 @@ module ""
             @"productos_remplazos*":list.create()
             @"cproducionproductos*":list.create()
             @"cconsumo_cproduccion*":list.create()
-            @"foliosdocumentos*":dbr.list(db,ftext(@list_folios_documentos),entity)
+            @"foliosdocumentos*":list.create()//dbr.list(db,ftext(@list_folios_documentos),entity)
             @"block_documentos*":dbr.list(db,ftext(@list_block_documentos),entity)
         }
         if TableExist(db,"cproduccion")
