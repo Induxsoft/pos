@@ -183,7 +183,10 @@ module ""
             gen_error:=@true
         }
         
-        do erp.dprod.salidasxventas(db,params_salidas)
+        if parse.bool(dbr.vars.get(db,"pos_afectar_existencias"))
+        {
+            do erp.dprod.salidasxventas(db,params_salidas)
+        }
 
         return record.create()
 

@@ -65,7 +65,13 @@ module ""
                                 @"IProducto":"select sys_pk from producto where codigo=@IProducto;"
                                 @"IAlmacen":"select sys_pk from almacen where codigo=@IAlmacen;"
                                 @"Documento":"select sys_pk from venta where Sys_guid=@Documento;"
-                                @"XSalir":"select ifnull(@Cantidad,0)"
+                                // @"XSalir":"select ifnull(@Cantidad,0)" 
+                                @"XSalir":"SELECT 
+                                        if(
+                                            IFNULL((SELECT p.itipo=2 FROM producto p WHERE p.sys_pk=@IProducto OR p.codigo=@IProducto),false)
+                                            ,
+                                            IFNULL(@Cantidad,0)
+                                            ,0);"
                                 @"sys_lastuser":"select sys_lastuser from dventa where sys_guid=@sys_guid"
                             } // queryfields
                         } // DVenta

@@ -42,5 +42,36 @@
                 "varinput": { "control": "text" }
             }
         ]
+    },
+    {
+        "id": "pos",
+        "caption": "Punto de Venta",
+        "help": "Variable globales: POS",
+        "vars": 
+        [
+            {
+                "varname": "pos_afectar_existencias",
+                "vardefault": "false",
+                "varvalue": "false",
+                "varcaption": "Afectar existencias al importar ventas.",
+                "varhelp": "Si es true la terminar de importar ventas por la herramienta del kit de emergencia, este se hará las salidas de existencias.",
+                "vartype": "bool",
+                "varinput": 
+                {
+                    "control": "select",
+                    "source":
+                    {
+                        "type":"list",
+                        "values":
+                        [
+                            {"val":"false", "text":"No"},
+                            {"val":"true", "text":"Sí"}
+                        ],
+                        "showfield":"text",
+                        "keyfield":"val"
+                    }
+                }
+            }
+        ]
     }
 ]
