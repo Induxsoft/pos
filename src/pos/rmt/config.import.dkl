@@ -10,6 +10,7 @@ module ""
             @"target":"corte"
             @"identity":"sys_guid=@sys_guid;"
             @"insert":"*"
+            @"after":"update corte set sys_dtcreated=now(),sys_exported=0,sys_dtexported=now() where sys_guid=@sys_guid"
             member @"queryfields"
             {
                 @"icaja":"select sys_pk from caja where codigo=@icaja"
@@ -68,7 +69,7 @@ module ""
                                 // @"XSalir":"select ifnull(@Cantidad,0)" 
                                 @"XSalir":"SELECT 
                                         if(
-                                            IFNULL((SELECT p.itipo=2 FROM producto p WHERE p.sys_pk=@IProducto OR p.codigo=@IProducto),false)
+                                            IFNULL((SELECT p.itipo=2 FROM producto p WHERE p.sys_pk=@IProducto limit 1),false)
                                             ,
                                             IFNULL(@Cantidad,0)
                                             ,0);"
@@ -80,6 +81,10 @@ module ""
                             @"identity":"sys_guid=@sys_guid;"
                             @"target":"movcaja"
                             @"insert":"*"  
+                            @"after":"update venta v
+                                        inner join movcaja m on v.referencia=m.referencia
+                                        set v.imovcaja=m.sys_pk where v.imovcaja is NULL;"
+
                             member @"queryfields" 
                             {
                                 @"ICategoria":"select sys_pk from categoria where codigo=@ICategoria;" 
