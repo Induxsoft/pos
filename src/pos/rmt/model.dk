@@ -180,7 +180,7 @@ module ""
             f_final:=@f_final
             kventa:=@kventa
             rventa:=@rventa
-            gen_error:=@true
+            gen_error:=parse.bool(dbr.vars.getd(db,"pos_detener_primer_error","true"))
         }
         
         if parse.bool(dbr.vars.get(db,"pos_afectar_existencias"))

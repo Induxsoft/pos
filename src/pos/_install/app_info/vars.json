@@ -71,6 +71,29 @@
                         "keyfield":"val"
                     }
                 }
+            },
+            {
+                "varname": "pos_detener_primer_error",
+                "vardefault": "true",
+                "varvalue": "true",
+                "varcaption": "Detener al primer error de salida de existencia.",
+                "varhelp": "Si es false, se omiten los errores y trata de procesar las ventas pendientes.",
+                "vartype": "bool",
+                "varinput": 
+                {
+                    "control": "select",
+                    "source":
+                    {
+                        "type":"list",
+                        "values":
+                        [
+                            {"val":"false", "text":"No"},
+                            {"val":"true", "text":"Sí"}
+                        ],
+                        "showfield":"text",
+                        "keyfield":"val"
+                    }
+                }
             }
         ]
     }

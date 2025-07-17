@@ -34,7 +34,7 @@ module ""
                     @"target":"Venta"
                     @"identity":"sys_guid=@sys_guid;"
                     @"insert":"*"
-                    @"row_in_transaction":@true // solo puede ver una transaccion, como ya hay una en venta no puede ver otra en foliosdocumentos, ni en dventa
+                    @"auto_transaction":@true // solo puede ver una transaccion, como ya hay una en venta no puede ver otra en foliosdocumentos, ni en dventa
                                                 // si hubiera una transaccion en  foliosdocumentos, no podria ver otra en venta ni dventa
                                                 //motivo, podria ocacionar un bucles de transaccion o hacer el commit en momento donde no se debe
                                                 //igual sucederia con los otros elementos
@@ -101,7 +101,7 @@ module ""
             @"target":"orden"
             @"identity":"sys_guid=@sys_guid;"
             @"insert":"*"
-            @"row_in_transaction":@true 
+            @"auto_transaction":@true 
             member @"queryfields" 
             {
                 @"iagente":"select sys_pk from agente where codigo=@iagente"
