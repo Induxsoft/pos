@@ -1,0 +1,76 @@
+#include "dkli.dkh"
+#!
+module "form_view_caja.dk"
+{
+	#include "functions.dkh"
+	#include "serialize.dkh"
+    #include "dbr.dkh"
+    #include "uielements.v12.dkl"
+
+	do @context.begin(@crud_context)
+    entity_id = @("$parameters/_entity_id")
+    @isNew = (entity_id == "_new")
+
+    buttons::
+    {
+        #$
+        button(type="submit" form="frm-card-caller" class="btn btn-sm border-secondary induxsoft-corners btn-main-action"){$"Guardar"}
+        #!
+    }
+    point buttons to buttons
+    new nav_config
+    {
+        @"title": "Terminal de procesamiento de tarjeta presente"
+        @"urlexit": "../"
+        @"buttons*":buttons
+    }
+
+    #$ 
+    div(class="container p-0")
+    {
+        section(id="top_area")
+        {
+            #!
+            do uie.printV12FormBar(nav_config)
+            #$
+        }
+        
+        div(id="work_area")
+        {
+            form(action="." method="POST" id="frm-card-caller")
+            {
+                div(class="#<ifstr(@('error/message')!='','alert alert-danger','')>"){$"#<@('error/message')>"}
+                input(type="hidden" name="sys_recver" value="#<@('#./sys_recver')>" id="sys_recver")
+                div(class="row")
+                {
+                    div(class="col-12 col-sm-3")
+                    {
+                        small(class="fw-bold"){"ID:"}
+                        input(type="text" name="id" class="induxsoft-form-control" value="#<@('$./id')>" maxlength="32" required="")
+                    }
+                    div(class="col-12 col-sm-6")
+                    {
+                        small(class="fw-bold"){"ID de terminal:"}
+                        input(type="text" name="key1" class="induxsoft-form-control" value="#<@('./key1')>" required="true" maxlength="150")
+                    }
+                    div(class="col-12 col-sm-6")
+                    {
+                        small{"Clave 2:"}
+                        input(type="text" name="key2" class="induxsoft-form-control" value="#<@('./key2')>"  maxlength="150")
+                    }
+                    div(class="col-12 col-sm-6")
+                    {
+                        small{"Clave 3:"}
+                        input(type="text" name="key3" class="induxsoft-form-control" value="#<@('./key3')>"  maxlength="150")
+                    }
+                }
+            }
+        }
+        
+    }
+
+	#! do @context.end()
+}
+
+
+                           

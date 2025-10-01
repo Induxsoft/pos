@@ -13,6 +13,21 @@ module "form.dk"
     entity_id = @("$parameters/_entity_id")
     isNew = (entity_id == "_new")
 
+    new def_agente
+    {
+        @"datatable*":dbr.list(@("&database"),"select sys_pk, concat(codigo,' - ',nombre ) descripcion from agente where ifnull(sys_deleted,0)=0",@null)
+        member "attributes"
+        {
+            @"class":"induxsoft-form-select"
+            @"name":"agente"
+        }
+        @"first_value":"0"
+        @"first_text":"Sin agente"
+        @"text_field":"descripcion"
+        @"value_field":"sys_pk"
+        @"selected":@('./agente')
+    }
+
     #$ div(class="container p-0")
     {
         form(action="." method="POST")
@@ -92,6 +107,13 @@ module "form.dk"
                         "data-value"="#<to.json(@('&./ubicacion'))>" 
                         columns="codigo,descripcion" 
                         colcaptions="Código,Descripción"){$""}
+                }
+                div(class="col-md-6")
+                {
+                    small{"Agente:"}
+                    #!
+                    do uie.dbSelect(def_agente)
+                    #$
                 }
 
             }

@@ -31,6 +31,21 @@ module "form_view_caja.dk"
         @"selected":@('./centroconsumo')
     }
 
+    new def_card_caller
+    {
+        @"datatable*":dbr.list(@("&database"),"select id, id as descripcion from pos_present_card_caller;",@null)
+        @"id":"pcardcaller"
+        member "attributes"
+        {
+            @"class":"induxsoft-form-select"
+            @"name":"pcardcaller"
+        }
+        @"first_value":"*"
+        @"first_text":"Ninguno"
+        @"text_field":"descripcion"
+        @"value_field":"id"
+        @"selected":@('./pcardcaller')
+    }
     #$ div(class="container p-0")
     {
         #! #include "caja.dkl"
@@ -66,15 +81,21 @@ module "form_view_caja.dk"
                         small(class="fw-bold"){"Descripción:"}
                         input(type="text" name="descripcion" class="induxsoft-form-control" value="#<@('./descripcion')>" required="true" maxlength="50")
                     }
-                    div(class="col-12 col-sm-6")
+                    div(class="col-12 col-sm-4")
                     {
                         small{"Codigo de cuenta:"}
                         input(type="text" name="codcuenta" class="induxsoft-form-control" value="#<@('./codcuenta')>"  maxlength="50")
                     }
-                    div(class="col-12 col-sm-6")
+                    div(class="col-12 col-sm-4")
                     {
                         small{"Centro de consumo:"}
                         #! do uie.dbSelect(def_cconsumo)
+                        #$
+                    }
+                    div(class="col-12 col-sm-4")
+                    {
+                        small{"Terminal de procesamiento:"}
+                        #! do uie.dbSelect(def_card_caller)
                         #$
                     }
                     div(class="col-md-6")
@@ -129,7 +150,7 @@ module "form_view_caja.dk"
                     }
                 }
                 legend{"Cortes"}
-                div(class="mb-3 row")       
+                div(class="row")       
                 {
                     // div(class="mb-3 row")       
                     // {
@@ -164,7 +185,7 @@ module "form_view_caja.dk"
                         small{"Hora corte 5:"}
                         input(type="time" class="induxsoft-form-control" name="uf_horacorte5"  value="#<@('./uf_horacorte5')>")
                     }
-                    div(class="mb-3 row")       
+                    div(class="row")       
                     {
                         div(class="col-sm-6")
                         {

@@ -1,0 +1,61 @@
+#include "dkli.dkh"
+#!
+module "list_view_caja.dk"
+{
+	#include "functions.dkh"
+	#include "serialize.dkh"
+	#include "../_lib/config.dk"
+
+	@gender=""
+    @title="Terminales de procesamiento de tarjeta presente"
+
+	do @context.begin(@crud_context)
+
+	ref @http_context=@("&http")
+	
+	new @table_definition
+    {
+    	@"datatable*":@("&.")
+    	member @"columns"
+        {
+        	member @"id"
+        	{
+        		@"caption":"ID"
+        	}
+        	member @"key1"
+        	{
+        		@"caption":"ID de terminal"
+        	}
+			member @"key2"
+        	{
+        		@"caption":"Clave 2"
+        	}
+			member @"key3"
+        	{
+        		@"caption":"Clave 3"
+        	}
+        	member @"_actions"
+        	{
+        		@"caption":"Acción"
+        	}
+        }
+    }
+    #$
+    div(class="m-0 justify-content-center" )
+	{
+    	#!
+    	include @path_common
+		#$
+		script
+		{
+			$'
+			function deleteEntity(sys_pk)
+			{
+				InduxsoftCrudlModel.Delete(sys_pk);
+			}
+			'
+		}
+    }
+	#!
+	do @context.end()
+}

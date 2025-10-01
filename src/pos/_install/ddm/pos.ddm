@@ -3,6 +3,20 @@ model "erp.pos"
 {
     #include "induxsoft.abstracts.ddm"
 
+    //procesador de cards
+    entity "pos_present_card_processor"
+    {
+        @"id" string(32) key unique required
+        @"title" string(50) required
+        @"driver" string(150) required
+    }
+    entity "pos_present_card_caller":"TableModel"
+    {
+        @"id" string(32) unique required
+        @"key1" string(150) //"Id de terminal"
+        @"key2" string(150) //"Campo previsto pero no usado por globalpay"
+	    @"key3" string(150) //"Campo previsto pero no usado por globalpay"
+    }
     //#region Domicilio
     entity "pais" : "TableModel"
     {
@@ -88,11 +102,24 @@ model "erp.pos"
         @"uf_cortereq_vntadic" int
         @"uf_lim_vntliber" int
         @"ubicacion" ref:"ubicacion"
+        @"pcardcaller" string ref:"pos_present_card_caller" ["id"]
     }
     entity "ubicacion" : "TableModel"
     {
         @"codigo" string(10) unique required
         @"descripcion" string(50) required
+    }
+
+    entity "agente" : "TableModel"
+    {
+        @"codigo" string(50) unique required
+        @"codnomina" string(50) unique
+        @"nombre" string(50) unique required
+        @"domicilio1" ref:"domicilio"
+        @"ubicacion" ref:"ubicacion"
+        @"pcardcaller" string ref:"pos_present_card_caller" ["id"]
+        @"caja" ref:"caja"
+        @"caja2" ref:"caja"
     }
     entity "cajero" : "TableModel"
     {
@@ -106,6 +133,7 @@ model "erp.pos"
         @"domicilio1" ref:"domicilio"
         @"uf_sys_baja" bool
         @"ubicacion" ref:"ubicacion"
+        @"agente" ref:"agente"
     }
 
     entity "tarjetacredito" : "TableModel"

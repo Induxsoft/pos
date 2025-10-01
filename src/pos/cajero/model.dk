@@ -5,7 +5,7 @@ module "cajero.dk"
     @read_query="
         select 
             sys_pk, sys_guid, sys_recver, sys_timestamp, sys_dtcreated, sys_deleted, 
-            codigo, email, nombre, telefono, contrasena, notas,ubicacion
+            codigo, email, nombre, telefono, contrasena, notas,ubicacion,agente
         from cajero 
         where #<@keyfield>=@_entity_id 
         limit 1;"
@@ -68,6 +68,8 @@ module "cajero.dk"
 		do dbr.apps.action.pre("VP21")
 		do dbr.begin(db)
 		
+        if @@(data,"#agente")<1{data<"agente*">:@null}
+
 		data<"sys_recver">:parse.num(@@(data,"#sys_recver"))
 		data<"sys_pk">:parse.num(@@(data,"#sys_pk"))
 
@@ -99,6 +101,8 @@ module "cajero.dk"
 		do dbr.apps.action.pre("VP22")
 		do dbr.begin(db)
 		
+        if @@(data,"#agente")<1{data<"agente*">:@null}
+
         contra = dbr.str(db, "SELECT contrasena FROM cajero WHERE sys_pk=@_entity_id", params)
         if contra == @@(data,"$contrasena") { do field.remove(data, "contrasena") }
         

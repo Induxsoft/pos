@@ -15,3 +15,4 @@
 "VP40","Consulta de cortes por caja","Corte caja","","/!/dbext/query/pos.vp40/","0","pos.caja","DET08D","0","report"
 "VP41","Consulta de movimiento de caja por caja y cajero","Corte y cajero","","/!/dbext/query/pos.vp41/","0","pos.caja","DET08D","0","report"
 
+"VP60","Terminales de procesamiento de tarjeta presente","Procesador de tarjeta","","/!/pos/card-caller/","0","pos.cardcaller","DET050","0","action"

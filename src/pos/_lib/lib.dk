@@ -32,4 +32,9 @@ module
 
         exception{ return @false }
     }
+    #!
+    limpiarTexto::texto
+	{
+        return trim(replace(ranychars(texto,'\\/:*?"<>|(-)[+]#$%&=,'," ")," ","_"))
+	}
 }

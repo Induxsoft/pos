@@ -9,7 +9,8 @@ module "caja.dk"
 	DATE_FORMAT(uf_horacorte3,'%H:%i') as uf_horacorte3,
 	DATE_FORMAT(uf_horacorte4,'%H:%i') as uf_horacorte4,
 	DATE_FORMAT(uf_horacorte5,'%H:%i') as uf_horacorte5,
-	uf_cortereq_vntadic,uf_lim_vntliber,notas,ubicacion
+	uf_cortereq_vntadic,uf_lim_vntliber,notas,ubicacion,
+	pcardcaller
 	from caja where #<@keyfield>=@_entity_id limit 1;"
 	
 	function check_autocode(&db,table,field,&data)
@@ -103,6 +104,7 @@ module "caja.dk"
 		{
 			do field.remove(data,"CodCuenta")
 		}
+		if trim(@@(data,"$pcardcaller"))=="*" || trim( @@(data,"$pcardcaller"))==""{data<"pcardcaller*">:@null}
 
 		data<"uf_limefectivo">: @@(data, "#uf_limefectivo")
 		data<"uf_lime_vntadic">: @@(data, "#uf_lime_vntadic")
@@ -133,10 +135,10 @@ module "caja.dk"
 
 		do dbr.apps.action.pre("VP12")
 		do dbr.begin(db)
-		if @@(data,"CodCuenta")==""
-		{
-			do field.remove(data,"CodCuenta")
-		}
+
+		if trim(@@(data,"$pcardcaller"))=="*" || trim( @@(data,"$pcardcaller"))==""{data<"pcardcaller*">:@null}
+
+		if @@(data,"CodCuenta")==""{do field.remove(data,"CodCuenta")}
 		if field.exist(data,"ubicacion") && trim(@@(data,"$ubicacion"))==""{data<"ubicacion*">:@null}
 		if field.exist(data,"uf_limefectivo") && trim(@@(data,"$uf_limefectivo")) == "" { data<"uf_limefectivo">: 0 }
 		if field.exist(data,"uf_lime_vntadic") && trim(@@(data,"$uf_lime_vntadic")) == "" { data<"uf_lime_vntadic">: 0 }

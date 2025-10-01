@@ -2,3 +2,4 @@
 "pos","pos.caja","Cajas",2023-12-26T09:25:59,"Catálogo de cajas"
 "pos","pos.cajero","Cajeros",2023-12-26T09:25:59,"Catálogo de cajeros"
 "pos","pos.tarjetacredito","Tarjetas aceptadas",2023-12-26T09:25:59,"Catálogo de tarjeta de crédito/debito"
+"pos","pos.cardcaller","Procesador de tarjeta",2025-09-29T09:25:59,"Terminales de procesamiento de tarjeta presente"

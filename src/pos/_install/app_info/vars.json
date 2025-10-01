@@ -50,6 +50,25 @@
         "vars": 
         [
             {
+                "varname": "pos_card_procesor",
+                "vardefault": "globalpay",
+                "varvalue": "globalpay",
+                "varcaption": "Procesador de tarjetas",
+                "varhelp": "Procesador de tarjetas al cobrar una comanda",
+                "vartype": "string",
+                "varinput": 
+                {
+                    "control": "select",
+                    "source":
+                    {
+                        "type":"query",
+                        "query":"select id, concat(title,' - [',driver,']')title from pos_present_card_processor",
+                        "keyfield":"id",
+                        "showfield":"title"
+                    }
+                }
+            },
+            {
                 "varname": "pos_afectar_existencias",
                 "vardefault": "false",
                 "varvalue": "false",

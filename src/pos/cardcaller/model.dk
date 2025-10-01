@@ -1,0 +1,42 @@
+#include "dkli.dkh"
+#!
+module "pos_present_card_caller :cardcaller"
+{
+    @table_name="pos_present_card_caller"
+    @list_query="select * from #<@table_name> where (ifnull(@s,'')='' or concat_ws('',id,key1,key2,key3) like concat('%',@s,'%'))"
+    @read_query="select * from #<@table_name> where sys_pk=@_entity_id"
+
+    list::&db,&params
+    {
+        return entity.list(db,params)
+    }
+
+    read::&db,&params
+    {
+        return entity.read(db,params)
+    }
+
+    create::&db,&params,&data
+    {
+        if trim(@@(data,"$id"))==""{do rise_error(500,"El campo `ID` es requerido")}
+        if trim(@@(data,"$key1"))==""{do rise_error(500,"El campo `ID de terminal` es requerido")}
+
+        data<"id">:limpiarTexto(@@(data,"$id"))
+        
+        return entity.create(db,params,data)
+    }
+
+    update::&db,&params,&data
+    {
+        if trim(@@(data,"$id"))==""{do rise_error(500,"El campo `ID` es requerido")}
+        if trim(@@(data,"$key1"))==""{do rise_error(500,"El campo `ID de terminal` es requerido")}
+
+        data<"id">:limpiarTexto(@@(data,"$id"))
+        
+        return entity.update(db,params,data)
+    }
+    point @list to cardcaller.list
+    point @read to cardcaller.read
+    point @create to cardcaller.create
+    point @update to cardcaller.update
+}

@@ -50,6 +50,7 @@ module "Controller configs"
 	do crudl.routes.entity("/cajero/","cajero")
 	do crudl.routes.entity("/tarjetacredito/","tarjetacredito")
 	do crudl.routes.entity("/rmt/","rmt")
+	do crudl.routes.entity("/card-caller/","cardcaller")
 
 	//No modifique a menos que sepa lo que está haciendo
 	do crudl.load_config()
