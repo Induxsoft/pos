@@ -50,6 +50,37 @@
         "vars": 
         [
             {
+                "varname": "pos_porcentaje_propina",
+                "vardefault": "5",
+                "varvalue": "5",
+                "varcaption": "Porcentaje de propina",
+                "varhelp": "",
+                "vartype": "number",
+                "varinput": 
+                {
+                    "control": "number"
+                }
+            },
+            {
+                "varname": "pos_type_card",
+                "vardefault": "001",
+                "varvalue": "001",
+                "varcaption": "Tipo de tarjeta",
+                "varhelp": "Tipo de tarjeta, se usará si no se encuentra un tipo de tarjeta en relación a los datos de la transacción",
+                "vartype": "string",
+                "varinput": 
+                {
+                    "control": "select",
+                    "source":
+                    {
+                        "type":"query",
+                        "query":"SELECt codigo,CONCAT(codigo,' - ',descripcion)descripcion FROM tarjetacredito WHERE IFNULL(sys_deleted,0)=0",
+                        "keyfield":"codigo",
+                        "showfield":"descripcion"
+                    }
+                }
+            },
+            {
                 "varname": "pos_card_procesor",
                 "vardefault": "globalpay",
                 "varvalue": "globalpay",
