@@ -50,6 +50,18 @@
         "vars": 
         [
             {
+                "varname": "pos_url_root_img_foot_line",
+                "vardefault": "",
+                "varvalue": "",
+                "varcaption": "Url raíz para las imagenes",
+                "varhelp": "Se usa al hacer una comanda, Ejemplo: https://demo.localhost/",
+                "vartype": "string",
+                "varinput": 
+                {
+                    "control": "string"
+                }
+            },
+            {
                 "varname": "pos_porcentaje_propina",
                 "vardefault": "5",
                 "varvalue": "5",
