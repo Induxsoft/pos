@@ -51,8 +51,8 @@
         [
             {
                 "varname": "pos_corte_ciego",
-                "vardefault": "No",
-                "varvalue": "No",
+                "vardefault": "Sí",
+                "varvalue": "Sí",
                 "varcaption": "Cierre de caja con corte ciego",
                 "varhelp": "Cierre de caja con corte ciego",
                 "vartype": "bool",
@@ -76,7 +76,7 @@
                 "varname": "pos_cat_egreso_x_corte",
                 "vardefault": "",
                 "varvalue": "",
-                "varcaption": "Categoría predeterminada de egresos por corte de caja automático.",
+                "varcaption": "Categoría para egresos por corte.",
                 "varhelp": "Categoría predeterminada de egresos por corte de caja automático.",
                 "vartype": "int",
                 "varinput": 
@@ -95,7 +95,7 @@
                 "varname": "pos_cat_ingreso_x_sobrante",
                 "vardefault": "",
                 "varvalue": "",
-                "varcaption": "Categoría predeterminada de ingreso por sobrante.",
+                "varcaption": "Categoría para ingreso por sobrante.",
                 "varhelp": "Categoría predeterminada de ingreso por sobrante.",
                 "vartype": "int",
                 "varinput": 
@@ -114,7 +114,7 @@
                 "varname": "pos_cat_ingreso_x_faltante",
                 "vardefault": "",
                 "varvalue": "",
-                "varcaption": "Categoría predeterminada de egreso por faltante.",
+                "varcaption": "Categoría para egreso por faltante.",
                 "varhelp": "Categoría predeterminada de egreso por faltante.",
                 "vartype": "int",
                 "varinput": 
