@@ -10,7 +10,8 @@ program "instalador"
     // deben estar en la carpeta _install/initial_data
     ref @files_to_import = from.json('[
         "caja.csv",
-        "cajero.csv"
+        "cajero.csv",
+        "categoria.csv"
     ]')
 
     // Lista de privilegios iniciales (arreglo de id de privilegios)
