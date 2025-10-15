@@ -49,7 +49,63 @@
         "help": "Variable globales: POS",
         "vars": 
         [
-            
+            {
+                "varname": "pos_cat_diferencia_al_corte",
+                "vardefault": "DAC",
+                "varvalue": "DAC",
+                "varcaption": "Diferencia de efectivo al corte",
+                "varhelp": "Ingreso o egreso por diferencia al corte",
+                "vartype": "string",
+                "varinput": 
+                {
+                    "control": "select",
+                    "source":
+                    {
+                        "type":"query",
+                        "query":"select c.codigo,concat(c.codigo,' - ',c.descripcion)descripcion from categoria c where ifnull(c.sys_deleted,0)=0",
+                        "keyfield":"codigo",
+                        "showfield":"descripcion"
+                    }
+                }
+            },
+            {
+                "varname": "pos_cat_retiro_al_corte",
+                "vardefault": "RCC",
+                "varvalue": "RCC",
+                "varcaption": "Retiro de efectivo al corte",
+                "varhelp": "Retiro de efectivo al corte",
+                "vartype": "string",
+                "varinput": 
+                {
+                    "control": "select",
+                    "source":
+                    {
+                        "type":"query",
+                        "query":"select c.codigo,concat(c.codigo,' - ',c.descripcion)descripcion from categoria c where ifnull(c.sys_deleted,0)=0",
+                        "keyfield":"codigo",
+                        "showfield":"descripcion"
+                    }
+                }
+            },
+            {
+                "varname": "pos_cat_retiro_otras_fpago",
+                "vardefault": "RCO",
+                "varvalue": "RCO",
+                "varcaption": "Retiro de otras formas de pago",
+                "varhelp": "Retiro de otras formas de pago al corte de caja",
+                "vartype": "string",
+                "varinput": 
+                {
+                    "control": "select",
+                    "source":
+                    {
+                        "type":"query",
+                        "query":"select c.codigo,concat(c.codigo,' - ',c.descripcion)descripcion from categoria c where ifnull(c.sys_deleted,0)=0",
+                        "keyfield":"codigo",
+                        "showfield":"descripcion"
+                    }
+                }
+            },
             {
                 "varname": "pos_url_root_img_foot_line",
                 "vardefault": "",
