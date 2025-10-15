@@ -138,8 +138,8 @@ model "erp.pos"
 
     entity "tarjetacredito" : "TableModel"
     {
-        @"codigo" string(5) unique required
-        @"descripcion" string(25) unique required
+        @"codigo" string(25) unique required
+        @"descripcion" string(50) unique required
         @"uf_porcomision" decimal(18,8) 
     }
     
