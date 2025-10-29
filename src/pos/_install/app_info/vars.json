@@ -162,7 +162,7 @@
                     "source":
                     {
                         "type":"query",
-                        "query":"select id, concat(title,' - [',driver,']')title from pos_present_card_processor",
+                        "query":"SELECT '' id,'(Ninguno)' title union select id, concat(title,' - [',driver,']')title from pos_present_card_processor",
                         "keyfield":"id",
                         "showfield":"title"
                     }
