@@ -3,6 +3,9 @@ model "erp.pos"
 {
     #include "induxsoft.abstracts.ddm"
 
+    entity "divisa" : "TableModel" {}
+    entity "cdocumentos" : "EnumModel" {}
+    entity "categoria" : "TableModel"{}
     //procesador de cards
     entity "pos_present_card_processor"
     {
@@ -152,5 +155,104 @@ model "erp.pos"
         @"error" memo			// Mensaje del último error
         @"las_error" datetime	// Fecha y hora en que ocurrió el último error
         @"sended" bool 			// Es true en la base de datos local (satélite)
+    }
+
+    /* uod.dtarjeta */
+    entity "dtarjeta" : "TableModel"
+    {
+        @"autorizacion" string(50)
+        @"cvv" string(10)
+        @"domicilio" string(1024)
+        @"importe" decimal(18,8)
+        @"nombre" string(50)
+        @"numero" string(32)
+        @"tipocambio" decimal(18,8)
+        @"idivisa" int ref:"divisa" ["sys_pk"] required
+        @"retiro" int ref:"movcaja" ["sys_pk"]
+        @"tipo" int ref:"tarjetacredito" ["sys_pk"] required
+        @"fk_movcaja_detalletarjetas" int ref:"movcaja" ["sys_pk"] required
+        @"uf_porcomision" decimal(18,8)
+    }
+    /* uod.corte */
+    entity "corte" : "TableModel"
+    {
+        @"cerrado" bool
+        @"fapertura" date required
+        @"fcierre" date
+        @"hapertura" datetime required
+        @"hcierre" datetime
+        @"icaja" int ref:"caja" ["sys_pk"] required
+        @"icajero" int ref:"cajero" ["sys_pk"]
+    }
+    /* uod.movcaja */
+    entity "movcaja" : "TableModel"
+    {
+        @"auditado" bool
+        @"cheques" decimal(18,8)
+        @"contabilizado" bool
+        @"depositos" decimal(18,8)
+        @"documento" int ref:"cdocumentos" ["id"] required
+        @"efectivo" decimal(18,8)
+        @"fecha" date required
+        @"hora" datetime required
+        @"notas" string(255)
+        @"partida" string(32)
+        @"poliza" string(32)
+        @"referencia" string(50) required
+        @"tarjetas" decimal(18,8)
+        @"tipocambio" decimal(18,8)
+        @"vales" decimal(18,8)
+        @"icategoria" int ref:"categoria" ["sys_pk"] required
+        @"icorte" int ref:"corte" ["sys_pk"] required
+        @"idivisa" int ref:"divisa" ["sys_pk"] required
+
+        index "idx_movcaja" unique
+        {
+            field "cheques"
+            field "efectivo"
+            field "fecha"
+            field "notas"
+            field "referencia"
+            field "tarjetas"
+            field "vales"
+        }
+    }
+    /* uod.ddepositos */
+    entity "ddepositos" : "TableModel"
+    {
+        @"banco" string(50) required
+        @"fecha" date required
+        @"importe" decimal(18,8)
+        @"referencia" string(50)
+        @"tipocambio" decimal(18,8)
+        @"idivisa" int ref:"divisa" ["sys_pk"] required
+        @"retiro" int ref:"movcaja" ["sys_pk"]
+        @"fk_movcaja_detalledepositos" int ref:"movcaja" ["sys_pk"] required
+    }
+    /* uod.dcheques */
+    entity "dcheques" : "TableModel"
+    {
+        @"banco" string(50) required
+        @"beneficiario" string(50) required
+        @"emisor" string(50) required
+        @"importe" decimal(18,8)
+        @"notas" string(50)
+        @"numero" string(5) required
+        @"tipocambio" decimal(18,8)
+        @"idivisa" int ref:"divisa" ["sys_pk"] required
+        @"retiro" int ref:"movcaja" ["sys_pk"]
+        @"fk_movcaja_detallecheques" int ref:"movcaja" ["sys_pk"] required
+    }
+     /* uod.dvales */
+    entity "dvales" : "TableModel"
+    {
+        @"fecha" date
+        @"importe" decimal(18,8)
+        @"notas" string(50)
+        @"referencia" string(50) required
+        @"tipocambio" decimal(18,8)
+        @"idivisa" int ref:"divisa" ["sys_pk"] required
+        @"retiro" int ref:"movcaja" ["sys_pk"]
+        @"fk_movcaja_detallevales" int ref:"movcaja" ["sys_pk"] required
     }
 }
