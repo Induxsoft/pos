@@ -16,6 +16,6 @@
 "VP41","Consulta de movimiento de caja por caja y cajero","Corte y cajero","","/!/dbext/query/pos.vp41/","0","pos.caja","DET08D","0","report"
 
 "VP60","Terminales de procesamiento de tarjeta presente","Procesador de tarjeta","","/!/pos/card-caller/","0","pos.cardcaller","DET050","0","action"
-"VP61","Agregar Terminal de procesamiento","Agregar Procesador de tarjeta","","/!/pos/card-caller/_new/","0","pos.cardcaller","DET050","0","action"
-"VP62","Editar Terminal de procesamiento","Editar Procesador de tarjeta","","/!/pos/card-caller/","0","pos.cardcaller","DET050","1","action"
-"VP63","Eliminar Terminal de procesamiento","Eliminar Procesador de tarjeta","","/!/pos/card-caller/","0","pos.cardcaller","DET050","1","action"
+"VP61","Agregar Terminal de procesamiento","Agregar Procesador","","/!/pos/card-caller/_new/","0","pos.cardcaller","DET050","0","action"
+"VP62","Editar Terminal de procesamiento","Editar Procesador","","/!/pos/card-caller/","0","pos.cardcaller","DET050","1","action"
+"VP63","Eliminar Terminal de procesamiento","Eliminar Procesador","","/!/pos/card-caller/","0","pos.cardcaller","DET050","1","action"
