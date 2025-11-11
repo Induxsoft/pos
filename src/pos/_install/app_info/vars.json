@@ -151,8 +151,8 @@
             },
             {
                 "varname": "pos_card_procesor",
-                "vardefault": "globalpay",
-                "varvalue": "globalpay",
+                "vardefault": "",
+                "varvalue": "",
                 "varcaption": "Procesador de tarjetas",
                 "varhelp": "Procesador de tarjetas al cobrar una comanda",
                 "vartype": "string",
