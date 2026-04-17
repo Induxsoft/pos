@@ -119,6 +119,42 @@
                 }
             },
             {
+                "varname": "pos_url_img_mesa",
+                "vardefault": "",
+                "varvalue": "",
+                "varcaption": "Url para el ícono de servicio a mesa",
+                "varhelp": "",
+                "vartype": "string",
+                "varinput": 
+                {
+                    "control": "string"
+                }
+            },
+            {
+                "varname": "pos_url_img_mesa_ff",
+                "vardefault": "",
+                "varvalue": "",
+                "varcaption": "Url para el ícono de comida rápida",
+                "varhelp": "",
+                "vartype": "string",
+                "varinput": 
+                {
+                    "control": "string"
+                }
+            },
+            {
+                "varname": "pos_url_img_mesa_ds",
+                "vardefault": "",
+                "varvalue": "",
+                "varcaption": "Url para el ícono de servicio a domicilio",
+                "varhelp": "",
+                "vartype": "string",
+                "varinput": 
+                {
+                    "control": "string"
+                }
+            },
+            {
                 "varname": "pos_porcentaje_propina",
                 "vardefault": "5",
                 "varvalue": "5",
