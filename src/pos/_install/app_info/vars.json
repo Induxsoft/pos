@@ -249,6 +249,18 @@
                         "keyfield":"val"
                     }
                 }
+            },
+            {
+                "varname": "pos_refrescar_mesas",
+                "vardefault": "180",
+                "varvalue": "180",
+                "varcaption": "Refrescar datos de las mesas",
+                "varhelp": "Segundos para refrescar los datos de las mesas",
+                "vartype": "number",
+                "varinput": 
+                {
+                    "control": "number"
+                }
             }
         ]
     }
