@@ -44,6 +44,31 @@
         ]
     },
     {
+        "id": "impresion",
+        "caption": "Impresion",
+        "help": "Información de encabezado y pie de página para los informes.",
+        "parent":"general",
+        "vars": 
+        [
+            {
+                "varname": "FXCA112",
+                "vardefault": "Mi restaurante",
+                "varvalue": "Mi restaurante",
+                "varcaption": "Encabezado de ticket",
+                "vartype": "string",
+                "varinput": { "control": "text" }
+            },
+            {
+                "varname": "FXCA113",
+                "vardefault": "Gracias por su compra, esperemos regrese pronto !!!",
+                "varvalue": "Gracias por su compra, esperemos regrese pronto !!!",
+                "varcaption": "Pie de ticket",
+                "vartype": "string",
+                "varinput": { "control": "text" }
+            }
+        ]
+    },
+    {
         "id": "pos",
         "caption": "Punto de Venta",
         "help": "Variable globales: POS",
