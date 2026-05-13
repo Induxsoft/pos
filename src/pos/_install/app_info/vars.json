@@ -56,7 +56,7 @@
                 "varvalue": "Mi restaurante",
                 "varcaption": "Encabezado de ticket",
                 "vartype": "string",
-                "varinput": { "control": "text" }
+                "varinput": { "control": "memo" }
             },
             {
                 "varname": "FXCA113",
@@ -64,7 +64,7 @@
                 "varvalue": "Gracias por su compra, esperemos regrese pronto !!!",
                 "varcaption": "Pie de ticket",
                 "vartype": "string",
-                "varinput": { "control": "text" }
+                "varinput": { "control": "memo" }
             }
         ]
     },
@@ -147,7 +147,7 @@
                 "varname": "pos_url_img_mesa",
                 "vardefault": "",
                 "varvalue": "",
-                "varcaption": "Url para el ícono de servicio a mesa",
+                "varcaption": "Url para el ícono de servicio a la cuenta",
                 "varhelp": "",
                 "vartype": "string",
                 "varinput": 
@@ -233,8 +233,8 @@
                 "varname": "pos_afectar_existencias",
                 "vardefault": "false",
                 "varvalue": "false",
-                "varcaption": "Afectar existencias al importar ventas.",
-                "varhelp": "Si es true la terminar de importar ventas por la herramienta del kit de emergencia, este se hará las salidas de existencias.",
+                "varcaption": "Afectar existencias al importar/procesar ventas.",
+                "varhelp": "Si es true al importar ventas o procesar ventas, este se hará las salidas de existencias.",
                 "vartype": "bool",
                 "varinput": 
                 {
@@ -279,12 +279,209 @@
                 "varname": "pos_refrescar_mesas",
                 "vardefault": "180",
                 "varvalue": "180",
-                "varcaption": "Refrescar datos de las mesas",
-                "varhelp": "Segundos para refrescar los datos de las mesas",
+                "varcaption": "Refrescar datos de las cuentas",
+                "varhelp": "Segundos para refrescar los datos de las cuentas",
                 "vartype": "number",
                 "varinput": 
                 {
                     "control": "number"
+                }
+            },
+            {
+                "varname": "pos_mostrar_cuentas",
+                "vardefault": "true",
+                "varvalue": "true",
+                "varcaption": "Muestra todas las acciones de abrir cuenta",
+                "varhelp": "Muestra todas las acciones de abrir cuenta",
+                "vartype": "bool",
+                "varinput": 
+                {
+                    "control": "select",
+                    "source":
+                    {
+                        "type":"list",
+                        "values":
+                        [
+                            {"val":"false", "text":"No"},
+                            {"val":"true", "text":"Sí"}
+                        ],
+                        "showfield":"text",
+                        "keyfield":"val"
+                    }
+                }
+            },
+            {
+                "varname": "pos_mostrar_comida_rapida",
+                "vardefault": "true",
+                "varvalue": "true",
+                "varcaption": "Muestra todas las acciones de comida rápida",
+                "varhelp": "Muestra todas las acciones de comida rápida",
+                "vartype": "bool",
+                "varinput": 
+                {
+                    "control": "select",
+                    "source":
+                    {
+                        "type":"list",
+                        "values":
+                        [
+                            {"val":"false", "text":"No"},
+                            {"val":"true", "text":"Sí"}
+                        ],
+                        "showfield":"text",
+                        "keyfield":"val"
+                    }
+                }
+            },
+            {
+                "varname": "pos_mostrar_servicio_domicilio",
+                "vardefault": "true",
+                "varvalue": "true",
+                "varcaption": "Muestra todas las acciones de servicio a comicilio",
+                "varhelp": "Muestra todas las acciones de servicio a comicilio",
+                "vartype": "bool",
+                "varinput": 
+                {
+                    "control": "select",
+                    "source":
+                    {
+                        "type":"list",
+                        "values":
+                        [
+                            {"val":"false", "text":"No"},
+                            {"val":"true", "text":"Sí"}
+                        ],
+                        "showfield":"text",
+                        "keyfield":"val"
+                    }
+                }
+            },
+            {
+                "varname": "pos_color_encabezado",
+                "vardefault": "#540883",
+                "varvalue": "#540883",
+                "varcaption": "Color a mostrar en el encabezado",
+                "varhelp": "Cambia el color del encabezado de la comandera",
+                "vartype": "string",
+                "varinput": 
+                {
+                    "control": "hexcolor"
+                }
+            },
+            {
+                "varname": "pos_titulo_encabezado",
+                "vardefault": "Induxsoft",
+                "varvalue": "Induxsoft",
+                "varcaption": "Título a mostrar en el encabezado",
+                "varhelp": "Cambia el título del encabezado de la comandera",
+                "vartype": "string",
+                "varinput": 
+                {
+                    "control": "text"
+                }
+            },
+            {
+                "varname": "pos_subtitulo_encabezado",
+                "vardefault": "",
+                "varvalue": "",
+                "varcaption": "Subtítulo a mostrar en el encabezado",
+                "varhelp": "Cambia el subtítulo del encabezado de la comandera",
+                "vartype": "string",
+                "varinput": 
+                {
+                    "control": "text"
+                }
+            },
+            {
+                "varname": "pos_mostrar_recetas",
+                "vardefault": "true",
+                "varvalue": "true",
+                "varcaption": "Mostrar todas la recetas",
+                "varhelp": "Muestra todas recetas disponibles y visibles",
+                "vartype": "bool",
+                "varinput": 
+                {
+                    "control": "select",
+                    "source":
+                    {
+                        "type":"list",
+                        "values":
+                        [
+                            {"val":"false", "text":"No"},
+                            {"val":"true", "text":"Sí"}
+                        ],
+                        "showfield":"text",
+                        "keyfield":"val"
+                    }
+                }
+            },
+            {
+                "varname": "pos_mostrar_servicios",
+                "vardefault": "true",
+                "varvalue": "true",
+                "varcaption": "Mostrar todos los servicios",
+                "varhelp": "Muestra todas servicios disponibles y visibles",
+                "vartype": "bool",
+                "varinput": 
+                {
+                    "control": "select",
+                    "source":
+                    {
+                        "type":"list",
+                        "values":
+                        [
+                            {"val":"false", "text":"No"},
+                            {"val":"true", "text":"Sí"}
+                        ],
+                        "showfield":"text",
+                        "keyfield":"val"
+                    }
+                }
+            },
+            {
+                "varname": "pos_mostrar_articulos",
+                "vardefault": "true",
+                "varvalue": "true",
+                "varcaption": "Mostrar todos los artículos",
+                "varhelp": "Muestra todas artículos disponibles y visibles",
+                "vartype": "bool",
+                "varinput": 
+                {
+                    "control": "select",
+                    "source":
+                    {
+                        "type":"list",
+                        "values":
+                        [
+                            {"val":"false", "text":"No"},
+                            {"val":"true", "text":"Sí"}
+                        ],
+                        "showfield":"text",
+                        "keyfield":"val"
+                    }
+                }
+            },
+            {
+                "varname": "pos_mostrar_control_propina",
+                "vardefault": "true",
+                "varvalue": "true",
+                "varcaption": "Mostrar el control de propina",
+                "varhelp": "Muestra el control para indicar el porcentaje de propina",
+                "vartype": "bool",
+                "varinput": 
+                {
+                    "control": "select",
+                    "source":
+                    {
+                        "type":"list",
+                        "values":
+                        [
+                            {"val":"false", "text":"No"},
+                            {"val":"true", "text":"Sí"}
+                        ],
+                        "showfield":"text",
+                        "keyfield":"val"
+                    }
                 }
             }
         ]
