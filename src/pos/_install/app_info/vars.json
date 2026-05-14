@@ -483,6 +483,30 @@
                         "keyfield":"val"
                     }
                 }
+            },
+            {
+                "varname": "pds_btn_mode",
+                "vardefault": "0",
+                "varvalue": "0",
+                "varcaption": "Botón Hecho en PDS",
+                "varhelp": "Acción a realizar al hacer clic en el botón hecho",
+                "vartype": "int",
+                "varinput": 
+                {
+                    "control": "select",
+                    "source":
+                    {
+                        "type":"list",
+                        "values":
+                        [
+                            {"val":"0", "text":"Sin ejecutar orden"},
+                            {"val":"1", "text":"Ejecución estricta"},
+                            {"val":"2", "text":"Ejecución flexible"}
+                        ],
+                        "showfield":"text",
+                        "keyfield":"val"
+                    }
+                }
             }
         ]
     }
