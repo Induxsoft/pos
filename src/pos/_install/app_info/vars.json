@@ -488,8 +488,8 @@
                 "varname": "pds_btn_mode",
                 "vardefault": "0",
                 "varvalue": "0",
-                "varcaption": "Botón Hecho en PDS",
-                "varhelp": "Acción a realizar al hacer clic en el botón hecho",
+                "varcaption": "Botón 'Atendido' en PDS",
+                "varhelp": "Acción a realizar al hacer clic en el botón Atendido",
                 "vartype": "int",
                 "varinput": 
                 {
@@ -506,6 +506,67 @@
                         "showfield":"text",
                         "keyfield":"val"
                     }
+                }
+            },
+            {
+                "varname": "pos_metodo_produccion",
+                "vardefault": "0",
+                "varvalue": "0",
+                "varcaption": "Método de producción",
+                "varhelp": "",
+                "vartype": "int",
+                "varinput": 
+                {
+                    "control": "select",
+                    "source":
+                    {
+                        "type":"list",
+                        "values":
+                        [
+                            {"val":"0", "text":"En demanda forzada"},
+                            {"val":"10", "text":"En demanda simple"},
+                            {"val":"20", "text":"En demanda con cancelación"},
+                            {"val":"1", "text":"Completa"}
+                        ],
+                        "showfield":"text",
+                        "keyfield":"val"
+                    }
+                }
+            },
+            {
+                "varname": "pos_produccion_al_cobrar",
+                "vardefault": "1",
+                "varvalue": "1",
+                "varcaption": "Producción al cobrar",
+                "varhelp": "",
+                "vartype": "int",
+                "varinput": 
+                {
+                    "control": "select",
+                    "source":
+                    {
+                        "type":"list",
+                        "values":
+                        [
+                            {"val":"0", "text":"No ejecutar órdenes"},
+                            {"val":"1", "text":"Ejecución total estricta"},
+                            {"val":"2", "text":"Ejecución flexible"}
+                        ],
+                        "showfield":"text",
+                        "keyfield":"val"
+                    }
+                }
+            },
+            {
+                "varname": "pos_tiempo_max_ult_corte",
+                "vardefault": "30",
+                "varvalue": "30",
+                "varcaption": "Tiempo máximo para reimprimir el último corte",
+                "varhelp": "Tiempo máximo para reimprimir el último corte de la caja actual (minutos)",
+                "vartype": "int",
+                "varinput": 
+                {
+                    "control": "number"
                 }
             }
         ]
