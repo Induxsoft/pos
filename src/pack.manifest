@@ -1,0 +1,6 @@
+{
+	"id":"pos",
+	"installable":["pos"],
+	"version":"1.0.49",
+	"schema_ver":"1.0.10"
+}
