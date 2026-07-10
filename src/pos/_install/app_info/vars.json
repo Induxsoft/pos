@@ -113,6 +113,25 @@
                 }
             },
             {
+                "varname": "pos_cat_movcaja",
+                "vardefault": "GAC01",
+                "varvalue": "GAC01",
+                "varcaption": "Categoría para el movimiento de caja",
+                "varhelp": "",
+                "vartype": "string",
+                "varinput": 
+                {
+                    "control": "select",
+                    "source":
+                    {
+                        "type":"query",
+                        "query":"select c.codigo,concat(c.codigo,' - ',c.descripcion)descripcion from categoria c where ifnull(c.sys_deleted,0)=0",
+                        "keyfield":"codigo",
+                        "showfield":"descripcion"
+                    }
+                }
+            },
+            {
                 "varname": "pos_cat_retiro_otras_fpago",
                 "vardefault": "RCO",
                 "varvalue": "RCO",
