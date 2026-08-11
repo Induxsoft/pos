@@ -178,7 +178,7 @@
                 "varname": "pos_url_img_mesa_ff",
                 "vardefault": "",
                 "varvalue": "",
-                "varcaption": "Url para el ícono de comida rápida",
+                "varcaption": "Url para el ícono de venta rápida",
                 "varhelp": "",
                 "vartype": "string",
                 "varinput": 
@@ -333,8 +333,8 @@
                 "varname": "pos_mostrar_comida_rapida",
                 "vardefault": "true",
                 "varvalue": "true",
-                "varcaption": "Muestra todas las acciones de comida rápida",
-                "varhelp": "Muestra todas las acciones de comida rápida",
+                "varcaption": "Muestra todas las acciones de venta rápida",
+                "varhelp": "Muestra todas las acciones de venta rápida",
                 "vartype": "bool",
                 "varinput": 
                 {
@@ -586,6 +586,48 @@
                 "varinput": 
                 {
                     "control": "number"
+                }
+            },
+            {
+                "varname": "pos_crear_ticket_venta_rapida",
+                "vardefault": "01",
+                "varvalue": "01",
+                "varcaption": "Momento de creación del ticket.",
+                "varhelp": "Momento de creación del ticket para venta rápida",
+                "vartype": "bool",
+                "varinput": 
+                {
+                    "control": "select",
+                    "source":
+                    {
+                        "type":"list",
+                        "values":
+                        [
+                            {"val":"01", "text":"Crear ticket al iniciar"},
+                            {"val":"02", "text":"Crear ticket al confirmar"}
+                        ],
+                        "showfield":"text",
+                        "keyfield":"val"
+                    }
+                }
+            },
+            {
+                "varname": "pos_serie_default",
+                "vardefault": "6",
+                "varvalue": "6",
+                "varcaption": "Serie predeterminada para ticket.",
+                "varhelp": "",
+                "vartype": "int",
+                "varinput": 
+                {
+                    "control": "select",
+                    "source":
+                    {
+                        "type":"query",
+                        "query":"SELECT b.sys_pk,b.serie FROM blockdocumentos b INNER JOIN cdocumentos c ON b.documento=c.id WHERE c.id=6",
+                        "keyfield":"sys_pk",
+                        "showfield":"serie"
+                    }
                 }
             }
         ]
