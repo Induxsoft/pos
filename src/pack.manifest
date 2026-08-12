@@ -2,5 +2,5 @@
 	"id":"pos",
 	"installable":["pos"],
 	"version":"1.0.51",
-	"schema_ver":"1.0.10"
+	"schema_ver":"1.0.11"
 }
