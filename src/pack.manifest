@@ -1,6 +1,6 @@
 {
 	"id":"pos",
 	"installable":["pos"],
-	"version":"1.0.51",
-	"schema_ver":"1.0.11"
+	"version":"1.0.52",
+	"schema_ver":"1.0.12"
 }
