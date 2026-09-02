@@ -1,0 +1,43 @@
+#include "dkli.dkh"
+#!
+module ""
+{
+    list::&db,&params
+    {
+        new entity
+        {
+            @"mascara1":dbr.vars.get(db,"mascara1")
+            @"mascara2":dbr.vars.get(db,"mascara2")
+            @"mascara3":dbr.vars.get(db,"mascara3")
+            @"mascara4":dbr.vars.get(db,"mascara4")
+            @"mascara5":dbr.vars.get(db,"mascara5")
+            @"factor1":dbr.vars.get(db,"factor1")
+            @"factor2":dbr.vars.get(db,"factor2")
+            @"factor3":dbr.vars.get(db,"factor3")
+            @"factor4":dbr.vars.get(db,"factor4")
+            @"factor5":dbr.vars.get(db,"factor5")
+        }
+
+        return entity
+    }
+    
+    save::&db,&params,&data
+    {
+        do dbr.vars.set(db,"mascara1",@@(data,"$mascara1"))
+        do dbr.vars.set(db,"mascara2",@@(data,"$mascara2"))
+        do dbr.vars.set(db,"mascara3",@@(data,"$mascara3"))
+        do dbr.vars.set(db,"mascara4",@@(data,"$mascara4"))
+        do dbr.vars.set(db,"mascara5",@@(data,"$mascara5"))
+        do dbr.vars.set(db,"factor1",@@(data,"$factor1"))
+        do dbr.vars.set(db,"factor2",@@(data,"$factor2"))
+        do dbr.vars.set(db,"factor3",@@(data,"$factor3"))
+        do dbr.vars.set(db,"factor4",@@(data,"$factor4"))
+        do dbr.vars.set(db,"factor5",@@(data,"$factor5"))
+
+        return list(db,@null)
+    }
+
+    point @list to list
+    point @create to save
+    point @update to save
+}
