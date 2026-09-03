@@ -13,7 +13,7 @@
 
 const RE_MASCARA = /^[A-Za-z0]+$/;
 const RE_CODIGO  = /^\d+$/;
-const RE_VAL_MASCARA = /^(?=.*q)(?=.*k)[A-Za-z]+$/i
+const RE_VAL_MASCARA = /^(?=.*q)(?=.*k)[A-Za-z0-9]+$/i
 /**
  * Valida una máscara. Llamar al guardar la configuración, no en cada lectura.
  * @param {string} mascara
