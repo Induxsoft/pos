@@ -10,7 +10,7 @@ module "caja.dk"
 	DATE_FORMAT(uf_horacorte4,'%H:%i') as uf_horacorte4,
 	DATE_FORMAT(uf_horacorte5,'%H:%i') as uf_horacorte5,
 	uf_cortereq_vntadic,uf_lim_vntliber,notas,ubicacion,
-	pcardcaller
+	pcardcaller,iblock,minipos_sync_token
 	from caja where #<@keyfield>=@_entity_id limit 1;"
 	
 	function check_autocode(&db,table,field,&data)

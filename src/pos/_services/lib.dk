@@ -5,6 +5,8 @@ module "Funciones para los servicios"
     @__user=""
     @__pwd=""
     @__ids=""
+
+
     function get_db()
     {
         @open_connection = @false
@@ -37,23 +39,7 @@ module "Funciones para los servicios"
         if @open_connection { @http_context<"session/idp/database*"> : db }
         return db
     }
-    
-    function _params()
-    {
-        return ifnull(@@(@http_context,"&request/get"),record.create())
-    }
 
-    function _payload()
-    {
-        ref post = ifnull(@@(@http_context,"&request/post"),record.create())
-        if list.count(list.create_from_fields(post)) < 1 {
-            post_string = trim(field.dstr(@http_context,"request/post_string","{}"))
-            if post_string == "" { post_string = "{}" }
-            
-            ref post:from.json(post_string)
-        }
-        return post
-    }
     function GetDataAutentication()
     {
         ref credentials=record.create()
@@ -85,6 +71,24 @@ module "Funciones para los servicios"
 
         return credentials
     }
+    
+    function _params()
+    {
+        return ifnull(@@(@http_context,"&request/get"),record.create())
+    }
+
+    function _payload()
+    {
+        ref post = ifnull(@@(@http_context,"&request/post"),record.create())
+        if list.count(list.create_from_fields(post)) < 1 {
+            post_string = trim(field.dstr(@http_context,"request/post_string","{}"))
+            if post_string == "" { post_string = "{}" }
+            
+            ref post:from.json(post_string)
+        }
+        return post
+    }
+
     function api_base_service()
     {
         expose response, params, payload, method
@@ -101,14 +105,18 @@ module "Funciones para los servicios"
         // "Content-Type, Authorization, X-Requested-With"
         @http_context<"response/headers/Access-Control-Allow-Headers"> : "*"
 
-        // Establecer encabezado de respuesta http
-        @http_context<"response/headers/Content-Type"> : "application/json;charset=utf-8"
-        // Indicar tipo de respuesta
-        @http_context<"response/output"> : "text"
-        
-        that
+        if method == "OPTIONS" { @http_context<"response/headers/status"> : 204 }
+        else
+        {
+            // Establecer encabezado de respuesta http
+            @http_context<"response/headers/Content-Type"> : "application/json;charset=utf-8"
+            // Indicar tipo de respuesta
+            @http_context<"response/output"> : "text"
+            
+            that
 
-        // Asignar la respuesa de salida
-        @http_context<"response/text"> : to.json(response)
+            // Asignar la respuesa de salida
+            @http_context<"response/text"> : to.json(response)
+        }
     }
 }

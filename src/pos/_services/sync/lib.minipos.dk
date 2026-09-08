@@ -1,0 +1,762 @@
+#include "dkli.dkh"
+#!
+module ":minipos"
+{
+    new @_cache
+    {
+        @"caja*": record.create()
+        @"cajero*": record.create()
+        @"cliente*": record.create()
+        @"producto*": record.create()
+        @"block*": record.create()
+        @"divisa*": record.create()
+        @"corte*": record.create()
+        @"almacen*": record.create()
+        @"recibidos*": list.create()
+        @"recibidos_index*": record.create()
+    }
+
+    cache_key :: value
+    {
+        return md5(value)
+    }
+
+    // Bitácora de las solicitudes de sincronización
+    insert_log :: &db, &payload
+    {
+        new log
+        {
+            @"sys_dtcreated*": dbr.sql("now()")
+            @"terminal": @@(payload,"$terminal")
+            @"caja": @@(payload,"$caja")
+            @"data": to.json(payload)
+        }
+        do dbr.insert(db,"minipos_sync_log",log)
+    }
+    /**
+     * Crea una relación (sin fk) del corte importado.
+     * Todos los parámetros corresponden a las GUID's de los registros importados <-> creados.
+     */
+    insert_minipos_cortes :: &db, terminal, turno_terminal, corte_terminal, corte
+    {
+        new data { @"sys_dtcreated*": dbr.sql("now()") }
+        terminal, turno_terminal, corte_terminal, corte >> data
+        do dbr.insert(db,"minipos_cortes",data)
+    }
+    /**
+     * Crea una relación (sin fk) del movimiento importado.
+     * Todos los parámetros corresponden a las GUID's de los registros importados <-> creados.
+     */
+    insert_minipos_movimientos :: &db, terminal, mov_terminal, movcaja
+    {
+        new data { @"sys_dtcreated*": dbr.sql("now()") }
+        terminal, mov_terminal, movcaja >> data
+        do dbr.insert(db,"minipos_movimientos",data)
+    }
+    /**
+     * Crea una relación (sin fk) de la venta importada.
+     * Todos los parámetros corresponden a las GUID's de los registros importados <-> creados.
+     */
+    insert_minipos_ventas :: &db, terminal, venta_terminal, venta
+    {
+        new data { @"sys_dtcreated*": dbr.sql("now()") }
+        terminal, venta_terminal, venta >> data
+        do dbr.insert(db,"minipos_ventas",data)
+    }
+
+    establecerGlobalvars :: &db, &payload
+    {
+        @terminal = @@(payload,"$terminal")
+        @caja = @@(payload,"$caja")
+
+        if isnull(obtenerCaja(db,@caja)) { do rise_error(404,"No fue posible resolver la caja: "+@caja) }
+
+        @decimales_en_importe = parse.num(dbr.vars.get(db,"FXCA001"))
+        @decimales_en_volumen = parse.num(dbr.vars.get(db,"FXCA002"))
+        @divisa_predeterminada = parse.num(dbr.vars.get(db,"FXCA013"))
+        @cliente_predeterminado = dbr.vars.get(db,"v12.ventas.cliente")
+        @zimpuesto = parse.num(dbr.vars.get(db,"ventas_zimpuesto"))
+        @ref_size = parse.num(dbr.vars.getd(db,"ventas_fix_ref_size",8))
+        @def_serie = parse.num(dbr.vars.get(db,"pos_serie_default"))
+        @producto_generico = dbr.vars.get(db,"pos.generic_product")
+        @fractions_group_rule = parse.num(dbr.vars.get(db,"comandas.fractions_group_rule"))
+	    @fractions_group = parse.num(dbr.vars.get(db,"comandas.fractions_group"))
+        @static_content_url = trim(dbr.vars.get(db,"prodserv_static_content_url"))
+        @static_content_path = trim(dbr.vars.get(db,"prodserv_path_static_content"))
+        
+        cat = dbr.vars.get(db,"pos_cat_movcaja")
+        @categoria_movcaja = dbr.num(db,ftext("SELECT sys_pk FROM categoria WHERE codigo = '#<cat>'"),@null)
+
+        url_root_foodbev = trim(dbr.vars.get(db,"pos_url_root_img_foot_line"))
+        if url_root_foodbev != ""
+        {
+            ref uri = _new("System.Uri",url_root_foodbev)
+            new @site
+            {
+                @"protocol": _get(uri,"Scheme")
+                @"host": _get(uri,"Host")
+                @"port": str(_get(uri,"Port"))
+            }
+        }
+        else
+        {
+            new @site
+            {
+                @"protocol": ifstr(parse.bool(@@(@http_context,"$request/headers/HTTPS")),"https","http")
+                @"host": @@(@http_context, "$request/headers/HTTP_HOST")
+                @"port": @@(@http_context, "$request/headers/SERVER_PORT")
+                @"qname": @@(@http_context,"$session/idp/qname")
+            }
+        }
+    }
+
+    newrec::
+    {
+        ref now = dbr.sql("now()")
+        new record
+        {
+            @"sys_pk": 0 // Clave primaria para la tabla (alcance local)
+            @"sys_guid": uuid() // GUID que puede usarse como clave primaria de alcance global
+            @"sys_dtcreated*": now // Fecha y hora de creación del registro
+            @"sys_timestamp*": now // Fecha y hora de la última actualización del registro (marca de tiempo con precisión hasta segundos)
+            @"sys_dtexported*": now // Indica la fecha en que se exportó por última vez
+            @"sys_info": ""
+            @"sys_user": "" // UserId del usuario logueado que creo el registro.
+            @"sys_lastuser": "" // UserId del usuario logueado que modifico el registro.
+            @"sys_recver": 0 // Número de versión de instancia de registro
+            @"sys_exported": @false // Indica si el registro ha sido exportado por las utilidades de transporte de datos
+            @"sys_deleted": @false // Indica si la fila está marcada como eliminada
+            /**
+            * Clave foránea que indica si se ha establecido un bloqueo pesimista sobre la fila.
+            * Este campo admite valores Nulos que significan que el registro no está bloqueado.
+            * No se admiten duplicados
+            */
+            @"sys_lock*": @null
+        }
+        return record
+    }
+
+    agregarRecibido :: uid
+    {
+        key = cache_key(uid)
+        if not(field.exist(@_cache.recibidos_index,key))
+        {
+            @_cache<"recibidos_index/"+key> : 1
+            do list.add(@_cache.recibidos,uid)
+        }
+    }
+
+    registrarCorteCache :: turno, &corte
+    {
+        key = cache_key(turno)
+        @_cache<"corte/"+key+"*"> : corte
+    }
+
+    obtenerCorteCache :: &db, turno
+    {
+        key = cache_key(turno)
+        if field.exist(@_cache.corte,key) { return field.obj(@_cache.corte,key) }
+
+        ref corte = obtenerCorteImportado(db,@terminal,turno)
+        do registrarCorteCache(turno,corte)
+        return corte
+    }
+
+    obtenerDocumentoMovcaja :: tipo
+    {
+        new cdocumentos
+        {
+            @"apertura": 33 //cIngreso
+            @"entrada": 33 //cIngreso
+            @"salida": 34 //cEgreso
+            @"venta": @cTicket
+        }
+        return field.dnum(cdocumentos,tipo,33)
+    }
+
+    obtenerCategoriaMovcaja :: tipo
+    {
+        return @categoria_movcaja
+    }
+
+    obtenerAlmacen :: &db, caja
+    {
+        if field.exist(@_cache.almacen,caja) { return field.num(@_cache.almacen,caja) }
+
+        caja >> params
+        ialmacen = dbr.num(db,"
+            SELECT cc.ialmacen
+            FROM caja c
+                INNER JOIN cconsumo cc ON c.centroconsumo = cc.sys_pk
+            WHERE c.codigo = @caja
+            LIMIT 1
+        ",params)
+
+        @_cache<"almacen/"+caja> : ialmacen
+        return ialmacen
+    }
+
+    obtenerCorteImportado :: &db, terminal, id
+    {
+        terminal, id >> p
+        return dbr.rec(db,"
+            SELECT c.sys_pk, c.sys_guid
+            FROM minipos_cortes m
+                INNER JOIN corte c ON c.sys_guid = m.corte
+            WHERE
+                (m.terminal=@terminal AND m.corte_terminal=@id) OR
+                (m.terminal=@terminal AND m.turno_terminal=@id)
+            LIMIT 1
+        ",p)
+    }
+
+    obtenerTipoCambio :: &db, idivisa
+    {
+        key = cache_key(str(idivisa))
+        if field.exist(@_cache.divisa,key) { return field.num(@_cache.divisa,key) }
+
+        idivisa >> p
+        tcambio = dbr.num(db,"SELECT tcambio FROM divisa WHERE sys_pk=@idivisa",p)
+        @_cache<"divisa/"+key> : tcambio
+        return tcambio
+    }
+
+    obtenerCaja :: &db, codigo
+    {
+        key = cache_key(codigo)
+        if field.exist(@_cache.caja,key) { return record.copy(field.obj(@_cache.caja,key),"*") }
+
+        codigo >> p
+        ref data = dbr.rec(db,"
+            SELECT sys_pk, centroconsumo, iblock
+            FROM caja
+            WHERE codigo=@codigo
+            LIMIT 1
+        ",p)
+
+        if isnull(data) { return @@(@_cache.caja,"&"+cache_key(@caja)) }
+        else
+        {
+            @_cache<"caja/"+key+"*"> : data
+            return data
+        }
+    }
+
+    obtenerCajero :: &db, codigo
+    {
+        key = cache_key(codigo)
+        if field.exist(@_cache.cajero,key) { return record.copy(field.obj(@_cache.cajero,key),"*") }
+
+        codigo >> p
+        ref data = dbr.rec(db,"
+            SELECT sys_pk, IFNULL(agente,0) AS agente
+            FROM cajero
+            WHERE codigo=@codigo
+            LIMIT 1
+        ",p)
+
+        if not(isnull(data)) { @_cache<"cajero/"+key+"*"> : data }
+        return data
+    }
+
+    obtenerCliente :: &db, codigo
+    {
+        key = cache_key(codigo)
+        if field.exist(@_cache.cliente,key) { return record.copy(field.obj(@_cache.cliente,key),"*") }
+
+        new p
+        {
+            @"codigo": codigo
+            @"predeterminado": @cliente_predeterminado
+        }
+        ref data = dbr.rec(db,"
+            SELECT sys_pk, codigo
+            FROM cliente
+            WHERE codigo=@codigo OR codigo=@predeterminado
+            ORDER BY CASE WHEN codigo=@codigo THEN 0 ELSE 1 END
+            LIMIT 1
+        ",p)
+
+        if not(isnull(data)) { @_cache<"cliente/"+key+"*"> : data }
+        return data
+    }
+
+    obtenerBlock :: &db, caja
+    {
+        key = cache_key(caja)
+        if field.exist(@_cache.block,key) { return record.copy(field.obj(@_cache.block,key),"*") }
+
+        ref caja_info = obtenerCaja(db,caja)
+        ref block = @null
+        if not(isnull(caja_info))
+        {
+            iblock = @@(caja_info,"#iblock")
+            if iblock > 0
+            {
+                iblock >> p
+                ref block : dbr.rec(db,"SELECT sys_pk AS iblock, serie FROM blockdocumentos WHERE sys_pk=@iblock LIMIT 1",p)
+            }
+        }
+
+        if isnull(block)
+        {
+            def_serie = @def_serie
+            def_serie >> p2
+            ref block : dbr.rec(db,"SELECT sys_pk AS iblock, serie FROM blockdocumentos WHERE sys_pk=@def_serie LIMIT 1",p2)
+        }
+
+        if not(isnull(block)) { @_cache<"block/"+key+"*"> : block }
+        return block
+    }
+
+    /**
+     * Busca y devuelve un objeto con información necesaria del producto proporcionado para proceder con las partidas de una venta.
+     * Se devuelve un producto genérico (configurado) cuando el SKU no se encuentra en la base de datos.
+     */
+    obtenerProducto :: &db, sku
+    {
+        key = cache_key(sku)
+        if field.exist(@_cache.producto,key) { return record.copy(field.obj(@_cache.producto,key),"*") }
+
+        sku, @zimpuesto >> params
+        sql = "
+        SELECT
+            p.sys_pk,
+            p.precio1 AS precio,
+            1 AS cantidad,
+            0 AS descuento1,
+            0 AS descuento2,
+            d.codigo AS `divisa`,
+            d.tcambio AS tipocambio,
+            (CONVERT(REPLACE(SUBSTRING_INDEX(i.i1venta, '|', @zimpuesto),'%',''), DECIMAL(18,6)) / 100) AS i1_tasa,
+            (CONVERT(REPLACE(SUBSTRING_INDEX(i.i2venta, '|', @zimpuesto),'%',''), DECIMAL(18,6)) / 100) AS i2_tasa,
+            (CONVERT(REPLACE(SUBSTRING_INDEX(i.i3venta, '|', @zimpuesto),'%',''), DECIMAL(18,6)) / 100) AS i3_tasa,
+            (CONVERT(REPLACE(SUBSTRING_INDEX(i.i4venta, '|', @zimpuesto),'%',''), DECIMAL(18,6)) / 100) AS i4_tasa,
+            0 AS es_generico
+        FROM producto p
+            INNER JOIN cfgimpuesto i ON p.impuestos = i.sys_pk
+            INNER JOIN divisa AS d ON p.idivisa = d.sys_pk
+        WHERE
+            NOT ifnull(p.sys_deleted,0)
+            AND (p.codigo = @sku OR p.codbar1 = @sku OR p.codbar2 = @sku OR p.codbar3 = @sku)
+        "
+        ref encontrado = dbr.rec(db,sql,params)
+
+        if isnull(encontrado)
+        {
+            params.sku := @producto_generico
+            if params.sku == "" { return @null }
+
+            ref encontrado : dbr.rec(db,sql,params)
+            if isnull(encontrado) { return @null }
+            encontrado.es_generico := @true
+        }
+
+        @_cache<"producto/"+key+"*"> : encontrado
+        return record.copy(encontrado,"*")
+    }
+
+    // El precio recibido por MiniPOS es final. Esta función obtiene la base antes de impuestos.
+    precioAntesDeImpuestos :: precio_final, &producto
+    {
+        factor12 = 1 + @@(producto,"#i1_tasa") + @@(producto,"#i2_tasa")
+        factor34 = 1 + @@(producto,"#i3_tasa") + @@(producto,"#i4_tasa")
+        factor = factor12 * factor34
+        if factor <= 0 { return precio_final }
+        return round(precio_final / factor, @decimales_en_importe)
+    }
+
+    /**
+     * Calcula y devuelve un objeto con el resumen de los importes calculados a partir de los datos proporcionados.
+     */
+    calcularImpuestos :: &data
+    {
+        precio = @@(data,"#precio")
+        cantidad = @@(data,"#cantidad")
+        descuento1 = @@(data,"#descuento1")
+        descuento2 = @@(data,"#descuento2")
+        i1_tasa = @@(data,"#i1_tasa")
+        i2_tasa = @@(data,"#i2_tasa")
+        i3_tasa = @@(data,"#i3_tasa")
+        i4_tasa = @@(data,"#i4_tasa")
+
+        subtotal = (precio * cantidad)
+        descuentos = (descuento1 + descuento2)
+        sub_desc = (subtotal - descuentos)
+        impuesto1 = (sub_desc * i1_tasa)
+        impuesto2 = (sub_desc * i2_tasa)
+        i1_i2 = (impuesto1 + impuesto2)
+        sub_desc_i1_i2 = (sub_desc + i1_i2)
+        impuesto3 = (sub_desc_i1_i2 * i3_tasa)
+        impuesto4 = (sub_desc_i1_i2 * i4_tasa)
+        i3_i4 = (impuesto3 + impuesto4)
+        impuestos = (i1_i2 + i3_i4)
+        total = (sub_desc + impuestos)
+
+        new importes
+        {
+            @"precio": precio
+            @"cantidad": cantidad
+            @"subtotal": subtotal
+            @"descuento1": descuento1
+            @"descuento2": descuento2
+            @"descuentos": descuentos
+            @"impuesto1": impuesto1
+            @"impuesto2": impuesto2
+            @"impuesto3": impuesto3
+            @"impuesto4": impuesto4
+            @"impuestos": impuestos
+            @"total": total
+        }
+        return importes
+    }
+
+    ventaImportada :: &db, terminal, uid
+    {
+        terminal, uid >> p
+        return dbr.num(db,"
+            SELECT COUNT(*)
+            FROM minipos_ventas
+            WHERE terminal=@terminal AND venta_terminal=@uid
+        ",p) > 0
+    }
+
+    movimientoImportado :: &db, terminal, uid
+    {
+        terminal, uid >> p
+        return dbr.num(db,"
+            SELECT COUNT(*)
+            FROM minipos_movimientos
+            WHERE terminal=@terminal AND mov_terminal=@uid
+        ",p) > 0
+    }
+
+    crearDVenta :: &db, &data
+    {
+        ref producto = obtenerProducto(db,@@(data,"$sku"))
+        if isnull(producto) { do rise_error(404,"No fue posible resolver el producto: "+@@(data,"$sku")) }
+
+        producto.precio := precioAntesDeImpuestos(@@(data,"#precio"),producto)
+        producto.cantidad := @@(data,"#cantidad")
+        producto.descuento1 := 0
+        producto.descuento2 := 0
+        ref importes = calcularImpuestos(producto)
+
+        ref dventa = newrec()
+        using dventa
+        {
+            @"precio": importes.precio
+            @"cantidad": importes.cantidad
+            @"descuento1": importes.descuento1
+            @"descuento2": importes.descuento2
+            @"factor": 1
+            @"impuesto1": importes.impuesto1
+            @"impuesto2": importes.impuesto2
+            @"impuesto3": importes.impuesto3
+            @"impuesto4": importes.impuesto4
+            @"notas": ifstr(producto.es_generico, @@(data,"$descripcion"), "")
+            @"status": @stt_dventa_entregado
+            @"tipocambio": 1
+            @"unidad": @@(data,"$unidad")
+            @"xfacturar": importes.cantidad
+            @"xsalir": importes.cantidad
+            @"iproducto": @@(producto,"#sys_pk")
+            @"ialmacen": @@(data,"#ialmacen")
+            @"fk_venta_detalle": @@(data,"#iventa")
+        }
+
+        do dbr.insert(db,"dventa",dventa)
+        return importes
+    }
+
+    /**
+     * @param Object data - Datos de la venta a importar.
+     */
+    CrearVenta :: &db, &data
+    {
+        ref fecha = str2dt(@@(data,"$fecha"))
+        ref cliente = obtenerCliente(db,@@(data,"$cliente/id"))
+        ref cajero = obtenerCajero(db,@@(data,"$cajero/id"))
+        ref caja = obtenerCaja(db,@@(data,"$caja"))
+        ref block = obtenerBlock(db,@@(data,"$caja"))
+
+        if isnull(cliente) { do rise_error(404,"No fue posible resolver el cliente de la venta") }
+        if isnull(caja) { do rise_error(404,"No fue posible resolver la caja de la venta") }
+        if isnull(block) { do rise_error(404,"No fue posible resolver la serie de la venta") }
+
+        esta_vigente = @@(data,"$estado") == "vigente"
+        tipocambio = obtenerTipoCambio(db,@divisa_predeterminada)
+        ialmacen = obtenerAlmacen(db,@@(data,"$caja"))
+
+        // Generar referencia del ticket
+        iblock = @@(block,"#iblock")
+        serie = @@(block,"$serie")
+        fultimo = dbr.folios.set_new(db, iblock, dbr.folios.get_new(db,iblock), 3)
+        referencia = serie + padleft(str(fultimo), @ref_size, "0")
+        ref folio = dbr.folios.info(db, iblock, fultimo)
+
+        // Estructura para la nueva venta
+        ref venta = newrec()
+        using venta
+        {
+            @"auditado": 0
+            @"contabilizado": 0
+            @"documento": @cTicket
+            @"referencia": referencia
+            @"tipocambio": tipocambio
+            @"subtotal": 0
+            @"descuento1": 0
+            @"descuento2": 0
+            @"impuesto1": 0
+            @"impuesto2": 0
+            @"impuesto3": 0
+            @"impuesto4": 0
+            @"notas": "Sincronizado - MiniPOS v1"
+            @"statusadministrativo": if(esta_vigente, @stt_adm_procesado, @stt_adm_cancelado)
+            @"statusentrega": if(esta_vigente, @stt_ent_entregado, @stt_ent_na)
+            @"statusfacturacion": if(esta_vigente, @stt_fac_xfacturar, @stt_fac_na)
+            @"statusfinanciero": if(esta_vigente, @stt_fin_saldado, @stt_fin_na)
+            @"formapago": @fp_contado
+            @"fecha*": fecha
+            @"fentrega*": fecha
+            @"vencimiento*": fecha
+            @"icconsumo": @@(caja,"#centroconsumo")
+            @"icliente": @@(cliente,"#sys_pk")
+            @"idivisa": @divisa_predeterminada
+            @"ifolio": @@(folio,"#sys_pk")
+        }
+
+        if not(isnull(cajero))
+        {
+            iagente = @@(cajero,"#agente")
+            if iagente > 0 { venta<"iagente"> : iagente }
+        }
+
+        // Crear venta
+        do dbr.insert(db,"venta",venta)
+        venta.sys_pk := dbr.num(db,"SELECT LAST_INSERT_ID()",@null)
+
+        // Insertar partidas de la venta
+        ref partidas = @@(data,"&partidas")
+        for i = 0; i < @count(partidas)
+        {
+            ref detalle = list.obj(partidas,i)
+            detalle.iventa := venta.sys_pk
+            detalle.ialmacen := ialmacen
+
+            ref imp = crearDVenta(db, detalle)
+            venta.subtotal   := venta.subtotal + imp.subtotal
+            venta.descuento1 := venta.descuento1 + imp.descuento1
+            venta.descuento2 := venta.descuento2 + imp.descuento2
+            venta.impuesto1  := venta.impuesto1 + imp.impuesto1
+            venta.impuesto2  := venta.impuesto2 + imp.impuesto2
+            venta.impuesto3  := venta.impuesto3 + imp.impuesto3
+            venta.impuesto4  := venta.impuesto4 + imp.impuesto4
+        }
+
+        // Actualizar importes de la venta
+        ref importes = record.copy(venta,"subtotal,descuento1,descuento2,impuesto1,impuesto2,impuesto3,impuesto4")
+        do dbr.update(db,"venta",importes,"sys_pk=@sys_pk",record.copy(venta,"sys_pk"))
+
+        return venta
+    }
+
+    /**
+     * @param Object data - Datos del corte a importar
+     */
+    CrearCorte :: &db, &data
+    {
+        ref apertura = str2dt(@@(data,"$apertura"))
+        ref caja = obtenerCaja(db,@@(data,"$caja"))
+        ref cajero = obtenerCajero(db,@@(data,"$cajero/id"))
+
+        ref corte = newrec()
+        using corte
+        {
+            @"cerrado": not(isnull(@@(data,"&cierre")))
+            @"fapertura*": apertura
+            @"fcierre*": @null
+            @"hapertura*": apertura
+            @"hcierre*": @null
+            @"icaja": @@(caja,"#sys_pk")
+            @"icajero": @@(cajero,"#sys_pk")
+        }
+
+        if corte.cerrado
+        {
+            ref cierre = str2dt(@@(data,"$cierre"))
+            corte<"fcierre*"> : cierre
+            corte<"hcierre*"> : cierre
+        }
+        if corte.icajero < 1 { do field.remove(corte,"icajero") }
+
+        do dbr.insert(db,"corte",corte)
+
+        corte.sys_pk := dbr.num(db,"SELECT LAST_INSERT_ID()",@null)
+        return corte
+    }
+
+    /**
+     * @param Object data - Datos del movimiento a importar
+     */
+    CrearMovcaja :: &db, &data, icorte
+    {
+        ref fecha = str2dt(@@(data,"$fecha"))
+        es_venta = @@(data,"$tipo") == "v"
+        subtipo = ifstr(es_venta,"venta",@@(data,"$subtipo"))
+
+        efectivo = 0
+        tarjetas = 0
+        vales = 0
+        cheques = 0
+        depositos = 0
+
+        if not(es_venta) { efectivo = @@(data,"#monto") }
+        else
+        {
+            ref pagos = @@(data,"&pago")
+            go foreach.lobj(value:pago) with(pagos)
+            {
+                forma = @@(pago,"$forma")
+                monto = @@(pago,"#monto")
+                switch forma
+                {
+                    case "efectivo" { efectivo = efectivo + monto break }
+                    case "tarjeta" { tarjetas = tarjetas + monto break }
+                    case "vales" { vales = vales + monto break }
+                }
+            }
+        }
+
+        ref movcaja = newrec()
+        using movcaja
+        {
+            @"auditado": @false
+            @"contabilizado": @false
+            @"documento": obtenerDocumentoMovcaja(subtipo)
+            @"efectivo": efectivo
+            @"tarjetas": tarjetas
+            @"vales": vales
+            @"cheques": cheques
+            @"depositos": depositos
+            @"tipocambio": obtenerTipoCambio(db,@divisa_predeterminada)
+            @"fecha*": fecha
+            @"hora*": fecha
+            @"notas": ifstr(es_venta,"Venta",@@(data,"$concepto")) + " (Sincronizado - MiniPOS v1)"
+            @"referencia": @@(data,"$uid")
+            @"icategoria": obtenerCategoriaMovcaja(subtipo)
+            @"icorte": icorte
+            @"idivisa": @divisa_predeterminada
+        }
+        do dbr.insert(db,"movcaja",movcaja)
+
+        movcaja.sys_pk := dbr.num(db,"SELECT LAST_INSERT_ID()",@null)
+        return movcaja
+    }
+
+    reemplazarMarcas :: s, sku
+    {
+        s = replace(s,"@_protocol",@site.protocol)
+        s = replace(s,"@_host",@site.host)
+        s = replace(s,"@_port",@site.port)
+        s = replace(s,"@_id",sku)
+        s = replace(s,"@_sku",sku)
+
+        return s
+    }
+    resolverProductoImagen :: &db, sku, &output
+    {
+        if @static_content_url=="" || @static_content_path=="" { return @false }
+
+        sku >> params
+        img = dbr.str(db,"SELECT guidimagen FROM carousel_producto WHERE sku = @sku",params)
+        if img=="" { return @false }
+
+        path = reemplazarMarcas(@static_content_path,sku)
+        file = path.concat(path,img)
+        if not(file.exists(file)) { return @false }
+
+        url = reemplazarMarcas(@static_content_url,sku)
+        output<sku> : path.concat(url,img)
+        return @true
+    }
+
+    CargarCatalogos :: &db, &response
+    {
+        new params
+        {
+            @"decgprule": @fractions_group_rule
+            @"decgp": @fractions_group
+            @"zimpuesto": @zimpuesto
+        }
+        ref productos = list.create()
+        ref fotos = record.create()
+        
+        ref rows = dbr.list(db,"
+            SELECT
+                p.codigo AS sku,
+                p.descripcion,
+                p.unidad,
+                p.precio1 AS precio,
+                1 AS cantidad,
+                0 AS descuento1,
+                0 AS descuento2,
+                IFNULL(p.existencia,0) AS existencia,
+                (CONVERT(REPLACE(SUBSTRING_INDEX(i.i1venta, '|', @zimpuesto),'%',''), DECIMAL(18,6)) / 100) AS i1_tasa,
+                (CONVERT(REPLACE(SUBSTRING_INDEX(i.i2venta, '|', @zimpuesto),'%',''), DECIMAL(18,6)) / 100) AS i2_tasa,
+                (CONVERT(REPLACE(SUBSTRING_INDEX(i.i3venta, '|', @zimpuesto),'%',''), DECIMAL(18,6)) / 100) AS i3_tasa,
+                (CONVERT(REPLACE(SUBSTRING_INDEX(i.i4venta, '|', @zimpuesto),'%',''), DECIMAL(18,6)) / 100) AS i4_tasa,
+                (p.itipo = 1) AS sinExistencia,
+                (CASE @decgprule
+                    -- Fraccionables y todos los demás NO
+                    WHEN 1 THEN (select count(*) from grupoproductos_producto_ where iproductos = p.sys_pk and igrupos = @decgp) > 0
+                    -- No fraccionables y todos los demás SÍ
+                    WHEN 2 THEN (select count(*) from grupoproductos_producto_ where iproductos = p.sys_pk and igrupos = @decgp) = 0
+                    ELSE FALSE
+                END) AS decimales
+            FROM producto p
+                INNER JOIN cfgimpuesto i ON p.impuestos = i.sys_pk
+            WHERE
+                NOT IFNULL(p.sys_deleted,0)
+                AND p.iclase BETWEEN 2 AND 6
+            ORDER BY p.codigo
+        ",params)
+
+        go foreach.lobj(value:row) with(rows)
+        {
+            ref importes = calcularImpuestos(row)
+            new producto
+            {
+                @"sku": @@(row,"$sku")
+                @"descripcion": @@(row,"$descripcion")
+                @"unidad": @@(row,"$unidad")
+                @"precio": round(@@(importes,"#total"),@decimales_en_importe)
+                @"existencia": @@(row,"#existencia")
+                @"decimales": @@(row,"#decimales")
+                @"sinExistencia": if(@@(row,"#sinExistencia"),@true,@false)
+                @"foto": resolverProductoImagen(db,@@(row,"$sku"),fotos)
+            }
+            do list.add(productos,producto)
+        }
+
+        ref clientes = dbr.list(db,"
+            SELECT codigo AS id, nombre, rfc
+            FROM cliente
+            WHERE NOT IFNULL(sys_deleted,0)
+            ORDER BY codigo
+        ",@null)
+
+        ref cajeros = dbr.list(db,"
+            SELECT codigo AS id, nombre, contrasena AS pwd, (IFNULL(uf_sys_baja,0)<>0) AS activo
+            FROM cajero
+            WHERE NOT IFNULL(sys_deleted,0)
+            ORDER BY codigo
+        ",@null)
+
+        response<"productos*"> : productos
+        response<"clientes*"> : clientes
+        response<"cajeros*"> : cajeros
+        response<"fotos*"> : fotos
+        response<"fecha"> : date_str(now(),"yyyy-MM-ddTHH:mm:sszzz")
+    }
+}

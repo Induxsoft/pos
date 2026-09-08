@@ -53,6 +53,21 @@ model "erp.pos"
     }
     //#endregion
 
+    entity "blockdocumentos" : "TableModel"
+    {
+        @"activo" bool required
+        @"datos" string(255)
+        @"documento" ref:"cdocumentos" required
+        @"finicial" int required
+        @"fiscal" bool required
+        @"fultimo" int required
+        @"idcontrol" string(32)
+        @"numcontrol" int
+        @"serie" string(10)
+        @"uf_cfdfolio" int
+        @"uf_cfdi_info" int
+    }
+
     entity "almacen" : "TableModel"
     {
         @"codcuenta" string(50) unique
@@ -106,6 +121,8 @@ model "erp.pos"
         @"uf_lim_vntliber" int
         @"ubicacion" ref:"ubicacion"
         @"pcardcaller" string ref:"pos_present_card_caller" ["id"]
+        @"iblock" ref:"blockdocumentos"
+        @"minipos_sync_token" string(128)
     }
     entity "ubicacion" : "TableModel"
     {
@@ -254,5 +271,79 @@ model "erp.pos"
         @"idivisa" int ref:"divisa" ["sys_pk"] required
         @"retiro" int ref:"movcaja" ["sys_pk"]
         @"fk_movcaja_detallevales" int ref:"movcaja" ["sys_pk"] required
+    }
+
+    // SINCRONIZACIÓN CON MINIPOS
+
+    entity "minipos_sync_log" //: "TableModel"
+    {
+        @"sys_dtcreated" datetime required
+
+        @"terminal" string(36)
+        @"caja" string(15)
+        @"data" mmemo
+    }
+
+    entity "minipos_cortes" //: "TableModel"
+    {
+        @"sys_dtcreated" datetime required
+
+        @"terminal" string(36) required
+        @"turno_terminal" string(36) required
+        @"corte_terminal" string(36) required
+        @"corte" string(36) unique required // ref:"corte" ["sys_guid"]
+
+        index "turno_terminal_uq" unique
+        {
+            field "terminal"
+            field "turno_terminal"
+        }
+        index "corte_terminal_uq" unique
+        {
+            field "terminal"
+            field "corte_terminal"
+        }
+        index "corte_idx"
+        {
+            field "corte"
+        }
+    }
+
+    entity "minipos_movimientos" //: "TableModal"
+    {
+        @"sys_dtcreated" datetime required
+
+        @"terminal" string(36) required
+        @"mov_terminal" string(36) required
+        @"movcaja" string(36) unique required // ref:"movcaja" ["sys_guid"]
+
+        index "mov_terminal_uq" unique
+        {
+            field "terminal"
+            field "mov_terminal"
+        }
+        index "movcaja_idx"
+        {
+            field "movcaja"
+        }
+    }
+
+    entity "minipos_ventas" //: "TableModel"
+    {
+        @"sys_dtcreated" datetime required
+
+        @"terminal" string(36) required
+        @"venta_terminal" string(36) required
+        @"venta" string(36) unique required // ref:"venta" ["sys_guid"]
+
+        index "venta_terminal_uq" unique
+        {
+            field "terminal"
+            field "venta_terminal"
+        }
+        index "venta_idx"
+        {
+            field "venta"
+        }
     }
 }

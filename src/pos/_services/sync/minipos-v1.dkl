@@ -1,0 +1,134 @@
+#include "dkli.dkh"
+#!
+program "POS Services"
+{
+    #include "functions.dkh"
+    #include "serialize.dkh"
+    #include "webcl.dkh"
+    #include "dbr.dkh"
+    #include "dbr.vars.dkl"
+    #include "dbr.folios.dkl"
+    #include "dbr.security.dkl"
+    #include "website.dkl"
+    #include "ventas/_lib/config.dk"
+    #include "./lib.minipos.dk"
+
+    // @logs_path = "/usr/dkl_test/pos/_services/sync/logs"
+    // @log_file = path.concat(@logs_path,date_str(now(),"HHmmss-"))
+
+    do errordet(@false)
+    go api_base_service(params:params, payload:payload, response:response)
+    {
+        ref @_HEADERS = @@(@http_context,"&request/headers")
+        ref db = get_db()
+
+        using response
+        {
+            @"success": @true
+            @"recibidos*": @_cache.recibidos
+        }
+
+        do minipos.insert_log(db,payload)
+        do minipos.establecerGlobalvars(db,payload)
+        
+        // 1) Cortes. Además se construye la relación turno -> corte en memoria.
+        // Primero se crean los cortes porque los movimientos dependen de ellos.
+        ref cortes = @@(payload,"&cortes")
+        for i = 0; i < @count(cortes)
+        {
+            ref item = list.obj(cortes,i)
+            uid = @@(item,"$uid")
+            turno = @@(item,"$turno")
+
+            ref corte = minipos.obtenerCorteImportado(db,@terminal,uid)
+            if isnull(corte)
+            {
+                ref corte = minipos.CrearCorte(db,item)
+                do minipos.insert_minipos_cortes(db,@terminal,turno,uid,@@(corte,"$sys_guid"))
+            }
+
+            do minipos.registrarCorteCache(turno,corte)
+            do minipos.agregarRecibido(uid)
+        }
+        
+        // 2) Movimientos explícitos del payload. Los nuevos requieren un corte del mismo payload relacionado por turno.
+        ref movimientos = @@(payload,"&movimientos")
+        for i = 0; i < @count(movimientos)
+        {
+            ref item = list.obj(movimientos,i)
+            uid = @@(item,"$uid")
+
+            if minipos.movimientoImportado(db,@terminal,uid) { do minipos.agregarRecibido(uid) }
+            else
+            {
+                ref corte = minipos.obtenerCorteCache(db,@@(item,"$turno"))
+                if not(isnull(corte))
+                {
+                    ref movcaja = minipos.CrearMovcaja(db,item,@@(corte,"#sys_pk"))
+                    do minipos.insert_minipos_movimientos(db,@terminal,uid,@@(movcaja,"$sys_guid"))
+                    do minipos.agregarRecibido(uid)
+                }
+            }
+        }
+
+        // 3) Ventas. Cada venta nueva se procesa en su propia transacción.
+        //    Si una falla se revierte por completo y su uid no entra en recibidos.
+        //    Cada venta genera un movimiento relacionado a un corte
+        ref ventas = @@(payload,"&ventas")
+        for i = 0; i < @count(ventas)
+        {
+            ref item = list.obj(ventas,i)
+            uid = @@(item,"$uid")
+
+            if minipos.ventaImportada(db,@terminal,uid) { do minipos.agregarRecibido(uid) }
+            else
+            {
+                codeblock "Importar venta MiniPOS"
+                {
+                    do dbr.begin(db)
+
+                    ref venta = minipos.CrearVenta(db,item)
+                    do minipos.insert_minipos_ventas(db,@terminal,uid,@@(venta,"$sys_guid"))
+
+                    // Sólo las ventas vigentes generan movimiento y únicamente cuando
+                    // existe un corte relacionado por turno en el payload.
+                    if @@(item,"$estado") == "vigente"
+                    {
+                        ref corte = minipos.obtenerCorteCache(db,@@(item,"$turno"))
+                        if not(isnull(corte)) { do minipos.CrearMovcaja(db,item,@@(corte,"#sys_pk")) }
+                    }
+
+                    do dbr.commit(db)
+                    do minipos.agregarRecibido(uid)
+
+                    exception
+                    {
+                        // do file.wtext(@log_file+"venta.txt",last_error())
+                        if dbr.in_transaction(db) { do dbr.rollback(db) }
+                        do pop_exception()
+                    }
+                }
+            }
+        }
+
+        do minipos.CargarCatalogos(db,response)
+
+        exception
+        {
+            // do file.wtext(@log_file+"exception.txt",last_error())
+            if dbr.in_transaction(db) { do dbr.rollback(db) }
+            using response
+            {
+                @"success": @false
+                @"message": last_error()
+            }
+        }
+
+        if isset("@open_connection"){
+            if @open_connection {
+                do dbr.close(db)
+                @http_context<"session/idp/database*"> : db
+            }
+        }
+    }
+}

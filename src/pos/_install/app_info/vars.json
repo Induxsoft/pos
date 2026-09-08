@@ -775,6 +775,23 @@
                 "varinput": {
                     "control": "button"
                 }
+            },
+            {
+                "varname": "pos.generic_product",
+                "vardefault": "",
+                "varvalue": "",
+                "varcaption": "Producto Genérico",
+                "varhelp": "Usar como alternativa en importaciones",
+                "vartype": "string",
+                "varinput": {
+                    "control": "select",
+                    "source": {
+                        "type":"query",
+                        "query":"SELECT '' AS codigo, 'Ninguno' AS descripcion UNION SELECT codigo, descripcion FROM producto WHERE NOT ifnull(sys_deleted,0) AND iclase BETWEEN 2 AND 6;",
+                        "keyfield":"codigo",
+                        "showfield":"descripcion"
+                    }
+                }
             }
         ]
     }
