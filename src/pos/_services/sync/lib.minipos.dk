@@ -64,6 +64,36 @@ module ":minipos"
         do dbr.insert(db,"minipos_ventas",data)
     }
 
+    autorizar :: &db, caja
+    {
+        http_auth = @@(@_HEADERS,"$HTTP_AUTHORIZATION")
+
+        if contains(http_auth," ")
+        {
+            ref auth = split(http_auth," ")
+            auth_opt = tolower(list.str(auth,0))
+            auth_opt_val = list.str(auth,1)
+        }
+        else
+        {
+            auth_opt = "bearer"
+            auth_opt_val = http_auth
+        }
+
+        if auth_opt == "bearer"
+        {
+            if auth_opt_val == "" { do rise_error(401,"No se proporciono el código de seguridad.") }
+
+            caja >> params
+            token = dbr.str(db,"SELECT minipos_sync_token FROM caja WHERE codigo = @caja",params)
+
+            if auth_opt_val != token { do rise_error(401,"No autorizado.") }
+            return
+        }
+
+        do rise_error(401,"Método de autenticación proporcionado no implementado.")
+    }
+
     establecerGlobalvars :: &db, &payload
     {
         @terminal = @@(payload,"$terminal")

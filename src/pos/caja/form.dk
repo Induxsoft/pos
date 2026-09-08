@@ -62,6 +62,20 @@ module "form_view_caja.dk"
         }
     }
 
+    function base_url(withPort)
+    {
+        ref @http_context = @("&http")
+
+        prot = ifstr(parse.bool(@@(@http_context,"$request/headers/HTTPS")),"https","http")
+        host = @@(@http_context, "$request/headers/HTTP_HOST")
+        port = @@(@http_context, "$request/headers/SERVER_PORT")
+
+        if parse.bool(withPort) { return prot+"://"+host+":"+port }
+        return prot+"://"+host
+    }
+
+    minipos_sync_url = path.concat(base_url(@false),"/pos/_services/sync/minipos-v1.dkl")
+
     #$ div(class="container p-0")
     {
         #! #include "caja.dkl"
@@ -87,34 +101,34 @@ module "form_view_caja.dk"
 
                 div(class="row")
                 {
-                    div(class="col-12 col-sm-2")
+                    div(class="col-sm-3 col-lg-2")
                     {
                         small(class="fw-bold"){"Código:"}
                         input(type="text" name="codigo" class="induxsoft-form-control" value="#<@('./codigo')>" maxlength="5" placeholder="<A>")
                     }
-                    div(class="col-12 col-sm-10")
+                    div(class="col-sm-9 col-lg-10")
                     {
                         small(class="fw-bold"){"Descripción:"}
                         input(type="text" name="descripcion" class="induxsoft-form-control" value="#<@('./descripcion')>" required="true" maxlength="50")
                     }
-                    div(class="col-12 col-sm-4")
+                    div(class="col-sm-6 col-md-4")
                     {
                         small{"Codigo de cuenta:"}
                         input(type="text" name="codcuenta" class="induxsoft-form-control" value="#<@('./codcuenta')>"  maxlength="50")
                     }
-                    div(class="col-12 col-sm-4")
+                    div(class="col-sm-6 col-md-8 col-lg-4")
                     {
                         small{"Centro de consumo:"}
                         #! do uie.dbSelect(def_cconsumo)
                         #$
                     }
-                    div(class="col-12 col-sm-4")
+                    div(class="col-md-6 col-lg-4")
                     {
                         small{"Terminal de procesamiento:"}
                         #! do uie.dbSelect(def_card_caller)
                         #$
                     }
-                    div(class="col-md-4")
+                    div(class="col-sm-6")
                     {
                         small{"Serie predeterminada para los Tickets"}
                         #! do uie.dbSelect(def_series)
@@ -128,6 +142,15 @@ module "form_view_caja.dk"
                             button(class="btn btn-light border" type="button" onclick="tools.copyOf('minipos_sync_token')"){"Copiar"}
                             input(class="form-control" type="text" name="minipos_sync_token" value="#<@('./minipos_sync_token')>" id="minipos_sync_token")
                             button(class="btn btn-success" type="button" onclick="tools.setGuidTo('minipos_sync_token')"){"Generar"}
+                        }
+                    }
+                    div(class="col-auto")
+                    {
+                        small{'Dirección del servicio para sincronizar con "MiniPOS"'}
+                        div(class="input-group")
+                        {
+                            button(class="btn btn-light border" type="button" onclick="tools.copyOf('minipos_sync_url')"){"Copiar"}
+                            span(class="form-control" id="minipos_sync_url"){"#<minipos_sync_url>"}
                         }
                     }
                     div(class="col-12")
