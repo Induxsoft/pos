@@ -1,0 +1,1123 @@
+#include "dkli.dkh"
+#!
+//  ===================================================================
+//  POS Sync — configuración de las bajadas
+//  ===================================================================
+//
+//  Nueve lotes, un solo mecanismo. Cada uno declara:
+//
+//    export   consulta que corre en la CENTRAL, filtrada por @ubic
+//    import   cómo se aplica en la LOCAL
+//    alcance  "completo" barre ausentes; "parcial" no toca lo demás
+//    barrido  SQL de barrido, sólo para los completos
+//
+//  Todos los lotes son planos: una transacción por entidad, sin
+//  anidamiento. El orden de los miembros es el orden de inserción, y
+//  ahí sí importa: las referencias tienen que entrar antes que quien
+//  las usa.
+//
+//  IDENTIDAD Y VERSIÓN
+//  El destino de una bajada es la local, que nunca crea estas filas por
+//  su cuenta, así que el sys_guid de la central es identidad válida en
+//  los dos lados. El update_if compara sys_timestamp: en las bajadas de
+//  catálogo es el de la central; en existencias, precios y saldos se
+//  envía la MARCA DEL LOTE en ese campo, porque los acumulados los
+//  mantienen disparadores y no hay garantía de que muevan su propio
+//  timestamp. Con eso un lote lento nunca revierte a uno más fresco,
+//  ni a un acuse, ni a una venta local.
+//
+//  LLAVES DE RESOLUCIÓN
+//  Las foráneas se resuelven por `codigo` donde existe. Donde el
+//  catálogo sólo tiene un nombre descriptivo —cfgimpuesto, zona,
+//  grupoproductos, grupoclientes— se resuelve por `sys_guid`, NO por el
+//  nombre: esos textos llevan acentos, paréntesis y signos, y basta una
+//  diferencia de codificación o de intercalación para que la comparación
+//  falle en silencio y deje la foránea en null.
+//
+//  Como estos catálogos bajan de la central, su sys_guid es el mismo en
+//  las dos bases: es una llave corta, ASCII y estable.
+//
+//  SUPUESTO MARCADO: las listas de columnas de los catálogos que no
+//  aparecen en pos.ddm, ventas.ddm ni dprod.ddm siguen el patrón
+//  codigo/descripcion del manual de la base. Verificar contra el DDM
+//  real antes de correr.
+module ""
+{
+    //  Marca del lote: la hora del servidor central en el momento de
+    //  generar. Se emite como sys_timestamp de cada fila.
+    @baj.marca = "DATE_FORMAT(NOW(),'%Y-%m-%d %H:%i:%s')"
+
+    @baj.newer = "sys_timestamp <= @sys_timestamp"
+
+    //  cproduccion no tiene columna ubicacion — no existe esa relación en el
+    //  modelo. Los centros de producción de una ubicación se derivan de sus
+    //  centros de consumo, que sí la tienen, vía cconsumo_cproduccion_.
+    //  Si @ubic viene vacío/nulo, o es '*' (comodín explícito de "todos"),
+    //  no hay filtro que aplicar: se traen TODOS los centros de
+    //  producción (primera rama). Si @ubic trae un código real, esa
+    //  rama no aporta filas y sólo cuenta la segunda, igual que antes.
+    @baj.cprod_ubic = "SELECT c.sys_pk FROM cproduccion c WHERE IFNULL(@ubic,'') IN ('','*')
+        UNION
+        SELECT x.icproduccion FROM cconsumo_cproduccion_ x
+        INNER JOIN cconsumo cc ON x.iconsumo=cc.sys_pk
+        WHERE cc.ubicacion=@ubic
+        OR cc.sys_pk IN (SELECT ca.centroconsumo FROM caja ca WHERE ca.ubicacion=@ubic)"
+
+    baj.sys :: a
+    {
+        return ftext("#<a>.sys_guid,
+        DATE_FORMAT(#<a>.sys_timestamp,'%Y-%m-%d %H:%i:%s') sys_timestamp,
+        DATE_FORMAT(#<a>.sys_dtcreated,'%Y-%m-%d %H:%i:%s') sys_dtcreated,
+        #<a>.sys_info,#<a>.sys_user,#<a>.sys_lastuser,#<a>.sys_recver,#<a>.sys_deleted")
+    }
+
+    //  Catálogo simple codigo/descripcion, que es el patrón de la mayoría.
+    baj.simple :: tabla
+    {
+        return ftext("SELECT #<baj.sys('t')>, t.codigo, t.descripcion, t.notas
+                      FROM #<tabla> t ORDER BY t.sys_pk")
+    }
+
+    //  El `after` registra qué llegó, para que el barrido sepa qué NO
+    //  llegó. @__origen es el uuid del lote, inyectado por el importador.
+    baj.rec :: entidad
+    {
+        return ftext("INSERT IGNORE INTO pos_bajada_rec (lote,entidad,sys_guid)
+                      VALUES (@__origen,'#<entidad>',@sys_guid)")
+    }
+
+    //  Miembro de importación estándar: upsert por sys_guid, descarta lo
+    //  viejo, y deja constancia para el barrido.
+    baj.imp :: tabla, entidad
+    {
+        new m
+        {
+            @"target": tabla
+            @"identity": "sys_guid=@sys_guid"
+            @"insert": "*"
+            @"update_if": @baj.newer
+            @"after": baj.rec(entidad)
+        }
+        return m
+    }
+
+    //  ---------------------------------------------------------------
+    //  Asociaciones: barrido y repoblación
+    //
+    //  No se aplican por upsert. Aunque el modelo actual las declare como
+    //  NmModel con sys_guid, el destino de estas bajadas es una base R5
+    //  con años encima donde esa columna puede no existir. Y aunque
+    //  exista, su valor no sirve: si las filas se crearon por separado en
+    //  cada base, los guid no coinciden y el upsert insertaría duplicados
+    //  en vez de actualizar.
+    //
+    //  Por eso viajan sólo los dos códigos y la marca. Se borra la tabla
+    //  antes de importar y se repuebla con lo que llega.
+    //
+    //  El DELETE es de la tabla completa, no acotado: en la local sólo
+    //  vive lo que se bajó (ver el requisito de base limpia), y antes de
+    //  importar todavía no se sabe qué códigos trae el lote.
+    //
+    //  Consecuencia aceptada: como no hay transacción envolvente, entre
+    //  el borrado y el repoblado esas asociaciones no existen. Por eso
+    //  conviene que estos lotes sean chicos y de cadencia lenta.
+    //  ---------------------------------------------------------------
+    baj.asoc :: tabla
+    {
+        new m
+        {
+            @"target": tabla
+            //  Identidad que nunca resuelve: el motor no encuentra fila y
+            //  siempre inserta. Es lo que convierte el upsert en append.
+            @"identity": "1=0"
+            @"insert": "*"
+        }
+        return m
+    }
+
+        //  Barrido: borra de la local lo que el lote completo no trajo.
+    //  Sólo alcanza filas cuya marca sea anterior a la del lote, para no
+    //  llevarse algo que un acuse más fresco acaba de escribir.
+    //  Barrido de maestros. DELETE IGNORE: una fila referenciada por
+    //  otra tabla no se borra y las demás sí. Le dejamos a la base la
+    //  decisión de qué sigue en uso, en vez de duplicar ese conocimiento
+    //  aquí con un NOT EXISTS por cada tabla que apunte.
+    //
+    //  Ojo si alguna restricción está declarada ON DELETE CASCADE: ahí no
+    //  hay error que ignorar y el borrado se propagaría a los hijos.
+    baj.barre :: tabla, entidad
+    {
+        return ftext("DELETE IGNORE FROM #<tabla>
+                      WHERE sys_timestamp < @marca
+                        AND sys_guid NOT IN (
+                            SELECT r.sys_guid FROM pos_bajada_rec r
+                             WHERE r.lote=@lote AND r.entidad='#<entidad>')")
+    }
+
+    //  Arma los miembros de importación y de barrido a partir de una
+    //  especificación compacta, para no repetir el mismo bloque treinta
+    //  veces. Formato:
+    //
+    //     entidad|tabla|campo>tabla.col;campo>tabla.col , entidad|tabla|...
+    //
+    //  El tercer segmento son las foráneas, resueltas por el valor que
+    //  viaja en el payload contra la columna indicada del destino.
+    baj.armar :: &c, spec
+    {
+        ref partes = split(spec,",")
+
+        for i=0; i<list.count(partes)
+        {
+            ref campos = split(trim(list.str(partes,i)),"|")
+            entidad = trim(list.str(campos,0))
+            tabla   = trim(list.str(campos,1))
+            fks     = ""
+            if list.count(campos) > 2 { fks = trim(list.str(campos,2)) }
+
+            if entidad != ""
+            {
+                ref m = baj.imp(tabla, entidad)
+
+                if fks != ""
+                {
+                    new qf { }
+                    ref l = split(fks,";")
+                    for j=0; j<list.count(l)
+                    {
+                        ref par = split(trim(list.str(l,j)),">")
+                        campo = trim(list.str(par,0))
+                        ref dest = split(trim(list.str(par,1)),".")
+                        if campo != ""
+                        {
+                            qf<campo>: ftext("SELECT sys_pk FROM #<trim(list.str(dest,0))> WHERE #<trim(list.str(dest,1))>=@#<campo>")
+                        }
+                    }
+                    m<"queryfields*">: qf
+                }
+
+                c<"import/"+entidad+"*">: m
+                c<"barrido/"+entidad>: baj.barre(tabla, entidad)
+            }
+        }
+        return 0
+    }
+
+    //  Igual que baj.armar, pero para asociaciones: sin update_if, sin
+    //  constancia para el barrido, y con un DELETE previo en `prelimpieza`
+    //  que sync-baja ejecuta ANTES de importar.
+    baj.asoc_armar :: &c, spec
+    {
+        ref partes = split(spec,",")
+
+        for i=0; i<list.count(partes)
+        {
+            ref campos = split(trim(list.str(partes,i)),"|")
+            tabla = trim(list.str(campos,0))
+            fks   = ""
+            if list.count(campos) > 1 { fks = trim(list.str(campos,1)) }
+
+            if tabla != ""
+            {
+                ref m = baj.asoc(tabla)
+
+                new qf { }
+                ref l = split(fks,";")
+                for j=0; j<list.count(l)
+                {
+                    ref par = split(trim(list.str(l,j)),">")
+                    campo = trim(list.str(par,0))
+                    ref dest = split(trim(list.str(par,1)),".")
+                    if campo != ""
+                    {
+                        qf<campo>: ftext("SELECT sys_pk FROM #<trim(list.str(dest,0))> WHERE #<trim(list.str(dest,1))>=@#<campo>")
+                    }
+                }
+                m<"queryfields*">: qf
+
+                c<"import/"+tabla+"*">: m
+                c<"prelimpieza/"+tabla>: ftext("DELETE FROM #<tabla>")
+            }
+        }
+        return 0
+    }
+
+    //  ===============================================================
+    //  Los lotes
+    //  ===============================================================
+    baj.config :: lote
+    {
+        new c { }
+
+        //  ---------------------------------------------------------------
+        //  tcambio — divisa y su paridad. Cadencia alta: una paridad vieja
+        //  calcula mal desde la primera venta.
+        //  ---------------------------------------------------------------
+        if lote == "tcambio"
+        {
+            new c
+            {
+                @"alcance": "parcial"
+                member @"export"
+                {
+                    member @"divisa"
+                    {
+                        @"source": ftext("SELECT #<baj.sys('t')>, t.codigo, t.descripcion,
+                            t.tcambio, t.decimales
+                            FROM divisa t ORDER BY t.sys_pk")
+                        @"parameters_prefix": ""
+                    }
+                }
+                member @"import"
+                {
+                    member @"divisa" { }
+                }
+            }
+            c<"import/divisa*">: baj.imp("divisa","divisa")
+        }
+
+        //  ---------------------------------------------------------------
+        //  base — sin dependencias. Cambia poco.
+        //  ---------------------------------------------------------------
+        if lote == "base"
+        {
+            new c
+            {
+                @"alcance": "completo"
+                member @"export"
+                {
+                    member @"divisa"
+                    {
+                        @"source": ftext("SELECT #<baj.sys('t')>, t.codigo, t.descripcion,
+                            t.tcambio, t.decimales FROM divisa t ORDER BY t.sys_pk")
+                        @"parameters_prefix": ""
+                    }
+                    member @"cfgimpuesto"
+                    {
+                        @"source": ftext("SELECT #<baj.sys('t')>, t.nombre,
+                            t.i1compra,t.i2compra,t.i3compra,t.i4compra,
+                            t.i1venta,t.i2venta,t.i3venta,t.i4venta
+                            FROM cfgimpuesto t ORDER BY t.sys_pk")
+                        @"parameters_prefix": ""
+                    }
+                    member @"pais"
+                    {
+                        @"source": ftext("SELECT #<baj.sys('t')>, t.codigo, t.nombre, t.codigotel
+                                          FROM pais t ORDER BY t.sys_pk")
+                        @"parameters_prefix": ""
+                    }
+                    member @"edoprov"
+                    {
+                        @"source": ftext("SELECT #<baj.sys('t')>, t.codigo, t.nombre, p.sys_guid ipais
+                            FROM edoprov t INNER JOIN pais p ON t.ipais=p.sys_pk ORDER BY t.sys_pk")
+                        @"parameters_prefix": ""
+                    }
+                    member @"ciudad"
+                    {
+                        @"source": ftext("SELECT #<baj.sys('t')>, t.codigo, t.nombre, t.codigotel, e.codigo estado
+                            FROM ciudad t INNER JOIN edoprov e ON t.estado=e.sys_pk ORDER BY t.sys_pk")
+                        @"parameters_prefix": ""
+                    }
+                    member @"zona"
+                    {
+                        @"source": ftext("SELECT #<baj.sys('t')>, t.nombre, t.notas FROM zona t ORDER BY t.sys_pk")
+                        @"parameters_prefix": ""
+                    }
+                    member @"banco"
+                    {
+                        @"source": ftext("SELECT #<baj.sys('t')>, t.nombre, t.notas, t.website FROM banco t ORDER BY t.sys_pk")
+                        @"parameters_prefix": ""
+                    }
+                    member @"tarjetacredito"
+                    {
+                        @"source": ftext("SELECT #<baj.sys('t')>, t.codigo, t.descripcion, t.uf_porcomision
+                                          FROM tarjetacredito t ORDER BY t.sys_pk")
+                        @"parameters_prefix": ""
+                    }
+                    member @"ctiposcategorias"
+                    {
+                        @"source":"select * from ctiposcategorias"
+                        @"parameters_prefix": ""
+                    }
+                    member @"cclaseproducto"
+                    {
+                        @"source":"select * from cclaseproducto"
+                        @"parameters_prefix": ""
+                    }
+                    member @"cformacomisionproducto"
+                    {
+                        @"source":"select * from cformacomisionproducto"
+                        @"parameters_prefix": ""
+                    }
+                    member @"categoria"
+                    {
+                        @"source": ftext("SELECT #<baj.sys('t')>, t.codigo, t.descripcion, t.tipo,
+                            t.codcuenta, p.codigo padre
+                            FROM categoria t LEFT JOIN categoria p ON t.padre=p.sys_pk ORDER BY t.sys_pk")
+                        @"parameters_prefix": ""
+                    }
+                }
+                member @"import"
+                {
+                    member @"ctiposcategorias"
+                    {
+                        @"target": "ctiposcategorias"
+                        @"identity": "id=@id"
+                        @"insert": "*"
+                    }
+                    member @"cclaseproducto"
+                    {
+                        @"target": "cclaseproducto"
+                        @"identity": "id=@id"
+                        @"insert": "*"
+                    }
+                    member @"cformacomisionproducto"
+                    {
+                        @"target": "cformacomisionproducto"
+                        @"identity": "id=@id"
+                        @"insert": "*"
+                    }
+                    member @"tarjetacredito"
+                    {
+                        @"target": "tarjetacredito"
+                        @"identity": "(codigo=@codigo OR sys_guid=@sys_guid)"
+                        @"insert": "*"
+                        @"update_if": "1=0"
+                    }
+                    //  Catálogos nativos de R5 (precargados de fábrica). Se
+                    //  detectan por codigo O por sys_guid -ambas son únicas
+                    //  en estas tablas- para no chocar ni contra el dato
+                    //  nativo (mismo codigo, distinto sys_guid) ni contra
+                    //  una fila ya sincronizada en una corrida anterior
+                    //  (mismo sys_guid, por si el codigo cambiara).
+                    member @"divisa"
+                    {
+                        @"target": "divisa"
+                        @"identity": "(codigo=@codigo OR sys_guid=@sys_guid)"
+                        @"insert": "*"
+                        @"update_if": @baj.newer
+                        @"after": baj.rec("divisa")
+                    }
+                    member @"pais"
+                    {
+                        @"target": "pais"
+                        @"identity": "(codigo=@codigo OR sys_guid=@sys_guid)"
+                        @"insert": "*"
+                        @"update_if": @baj.newer
+                        @"after": baj.rec("pais")
+                    }
+                    member @"edoprov"
+                    {
+                        @"target": "edoprov"
+                        @"identity": "(codigo=@codigo OR sys_guid=@sys_guid)"
+                        @"insert": "*"
+                        @"update_if": @baj.newer
+                        @"after": baj.rec("edoprov")
+                        member @"queryfields"
+                        {
+                            @"ipais": "SELECT sys_pk FROM pais WHERE sys_guid=@ipais"
+                        }
+                    }
+                    member @"ciudad"
+                    {
+                        @"target": "ciudad"
+                        @"identity": "(codigo=@codigo OR sys_guid=@sys_guid)"
+                        @"insert": "*"
+                        @"update_if": @baj.newer
+                        @"after": baj.rec("ciudad")
+                        member @"queryfields"
+                        {
+                            @"estado": "SELECT sys_pk FROM edoprov WHERE codigo=@estado"
+                        }
+                    }
+                    member @"categoria"
+                    {
+                        @"target": "categoria"
+                        @"identity": "(codigo=@codigo OR sys_guid=@sys_guid)"
+                        @"insert": "*"
+                        @"update_if": @baj.newer
+                        @"after": baj.rec("categoria")
+                        member @"queryfields"
+                        {
+                            @"padre": "SELECT sys_pk FROM categoria WHERE codigo=@padre"
+                        }
+                    }
+                }
+                member @"barrido"
+                {
+                    @"divisa": baj.barre("divisa","divisa")
+                    @"pais": baj.barre("pais","pais")
+                    @"edoprov": baj.barre("edoprov","edoprov")
+                    @"ciudad": baj.barre("ciudad","ciudad")
+                    @"categoria": baj.barre("categoria","categoria")
+                }
+            }
+            do baj.armar(c,"cfgimpuesto|cfgimpuesto|,zona|zona|,banco|banco|")
+        }
+
+        //  ---------------------------------------------------------------
+        //  estructura — producto CON sus 20 precios.
+        //  ---------------------------------------------------------------
+        if lote == "estructura"
+        {
+            new c
+            {
+                @"alcance": "completo"
+                member @"export"
+                {
+                                        //  linea.clase es referencia a un enum: viaja el id.
+                    member @"linea"
+                    {
+                        @"source": ftext("SELECT #<baj.sys('t')>, t.codigo, t.descripcion, t.clase,
+                            t.color, t.visible, t.notas, t.uf_indicaciones
+                        FROM linea t ORDER BY t.sys_pk")
+                        @"parameters_prefix": ""
+                    }
+                    member @"marca"
+                    {
+                        @"source": ftext("SELECT #<baj.sys('t')>, t.codigo, t.descripcion FROM marca t ORDER BY t.sys_pk")
+                        @"parameters_prefix": ""
+                    }
+                    member @"departamento"
+                    {
+                        @"source": ftext("SELECT #<baj.sys('t')>, t.codigo, t.descripcion FROM departamento t ORDER BY t.sys_pk")
+                        @"parameters_prefix": ""
+                    }
+                    member @"grupoproductos"
+                    {
+                        @"source": ftext("SELECT #<baj.sys('t')>, t.nombre, t.notas, t.tasa_iva FROM grupoproductos t ORDER BY t.sys_pk")
+                        @"parameters_prefix": ""
+                    }
+                    member @"producto"
+                    {
+                        //  Los 20 precios son precio1..precio5 y
+                        //  precio106..precio120, no p1..p20. El lote de
+                        //  precios los refresca aparte con cadencia mayor; el
+                        //  update_if por marca evita que este lote lo revierta.
+                            @"source": ftext("SELECT #<baj.sys('t')>,0 sys_exported,
+                            DATE_FORMAT(t.sys_dtcreated,'%Y-%m-%d %H:%i:%s') sys_dtexported,
+                             t.codigo, t.descripcion,
+                            t.unidad,t.unidadb,t.unidadc,t.unidadd,t.unidade,
+                            IFNULL(t.factorb,1) factorb,t.factorc,t.factord,t.factore,
+                            t.codbar1,t.codbar2,t.codbar3,
+                            t.iclase,t.itipo,IFNULL(t.metodovaluacion,0) metodovaluacion,t.formacomision,t.tipocomision,
+                            IFNULL(t.adicional,0) adicional,t.color,t.notas,t.visible,
+                            IFNULL(t.reqlote,0) reqlote,IFNULL(t.reqserie,0) reqserie,
+                            t.minimo,t.maximo,t.puntoro,t.diasentrega,
+                            t.desc2,t.desc3,t.desc4,t.desc5,
+                            t.lim2,t.lim3,t.lim4,t.lim5,
+                            IFNULL(t.flaglimites,0) flaglimites,IFNULL(t.flagutilidad,0) flagutilidad,
+                            t.padic1,t.padic2,t.padic3,t.padic4,t.padic5,t.ppuntos,
+                            t.precio1,t.precio2,t.precio3,t.precio4,t.precio5,
+                            t.precio106,t.precio107,t.precio108,t.precio109,t.precio110,
+                            t.precio111,t.precio112,t.precio113,t.precio114,t.precio115,
+                            t.precio116,t.precio117,t.precio118,t.precio119,t.precio120,
+                            t.ivariables,
+                            IFNULL(t.uf_solicitarcantidad,0) uf_solicitarcantidad,
+                            t.uf_sys_baja,
+                            IFNULL(t.uf_complemento,0) uf_complemento,
+                            IFNULL(t.uf_inhabilitado,0) uf_inhabilitado,
+                            IFNULL(t.uf_sat_proser,'') uf_sat_proser,IFNULL(t.uf_sat_uniproser,'') uf_sat_uniproser,
+                            dv.codigo idivisa, l.codigo ilinea, m.codigo imarca,
+                            d.codigo idepartamento, ci.sys_guid impuestos
+                        FROM producto t
+                        INNER JOIN divisa dv ON t.idivisa=dv.sys_pk
+                        INNER JOIN linea l ON t.ilinea=l.sys_pk
+                        INNER JOIN cfgimpuesto ci ON t.impuestos=ci.sys_pk
+                        LEFT  JOIN marca m ON t.imarca=m.sys_pk
+                        LEFT  JOIN departamento d ON t.idepartamento=d.sys_pk
+                        ORDER BY t.sys_pk")
+                        @"parameters_prefix": ""
+                    }
+                    member @"grupoproductos_producto_"
+                    {
+                        @"source": ftext("SELECT
+                            DATE_FORMAT(t.sys_timestamp,'%Y-%m-%d %H:%i:%s') sys_timestamp,
+                            p.codigo iproductos, g.sys_guid igrupos
+                        FROM grupoproductos_producto_ t
+                        INNER JOIN producto p ON t.iproductos=p.sys_pk
+                        INNER JOIN grupoproductos g ON t.igrupos=g.sys_pk
+                        ORDER BY t.sys_pk")
+                        @"parameters_prefix": ""
+                    }
+                }
+                member @"import" { }
+                member @"barrido" { }
+                member @"prelimpieza" { }
+            }
+            do baj.armar(c,"linea|linea|,marca|marca|,departamento|departamento|,grupoproductos|grupoproductos|,producto|producto|idivisa>divisa.codigo;ilinea>linea.codigo;imarca>marca.codigo;idepartamento>departamento.codigo;impuestos>cfgimpuesto.sys_guid")
+            do baj.asoc_armar(c,"grupoproductos_producto_|iproductos>producto.codigo;igrupos>grupoproductos.sys_guid")
+        }
+
+        //  ---------------------------------------------------------------
+        //  composicion — exige que TODOS los productos estén, incluidos
+        //  los del reemplazo. Nunca correr antes que estructura.
+        //  ---------------------------------------------------------------
+        if lote == "composicion"
+        {
+            new c
+            {
+                @"alcance": "completo"
+                member @"export"
+                {
+                    member @"ivariable"
+                    {
+                        @"source": ftext("SELECT #<baj.sys('t')>, t.minimo, t.maximo, t.factor,
+                            t.descripcion, t.padicional,
+                            g.sys_guid grupo, p.codigo fk_producto_ivariables
+                        FROM ivariable t
+                        LEFT JOIN grupoproductos g ON t.grupo=g.sys_pk
+                        LEFT JOIN producto p ON t.fk_producto_ivariables=p.sys_pk
+                        ORDER BY t.sys_pk")
+                        @"parameters_prefix": ""
+                    }
+                    member @"iensamble"
+                    {
+                        @"source": ftext("SELECT #<baj.sys('t')>, t.cantidad, t.omitible,
+                            t.cantpoco, t.cantmucho, t.cantdemasiado,
+                            e.codigo elemento, r.codigo reemplazo,
+                            p.codigo fk_producto_elementos
+                        FROM iensamble t
+                        INNER JOIN producto p ON t.fk_producto_elementos=p.sys_pk
+                        INNER JOIN producto e ON t.elemento=e.sys_pk
+                        LEFT  JOIN producto r ON t.reemplazo=r.sys_pk
+                        ORDER BY t.sys_pk")
+                        @"parameters_prefix": ""
+                    }
+                }
+                member @"import" { }
+                member @"barrido" { }
+            }
+            do baj.armar(c,"ivariable|ivariable|grupo>grupoproductos.sys_guid;fk_producto_ivariables>producto.codigo,iensamble|iensamble|elemento>producto.codigo;reemplazo>producto.codigo;fk_producto_elementos>producto.codigo")
+        }
+
+        //  ---------------------------------------------------------------
+        //  cliente — sin altas locales, así que barre igual que los demás.
+        //  ---------------------------------------------------------------
+        if lote == "cliente"
+        {
+            new c
+            {
+                @"alcance": "completo"
+                member @"export"
+                {
+                    member @"tipocliente"
+                    {
+                        @"source": baj.simple("tipocliente")
+                        @"parameters_prefix": ""
+                    }
+                    member @"grupoclientes"
+                    {
+                        @"source": ftext("SELECT #<baj.sys('t')>, t.nombre FROM grupoclientes t ORDER BY t.sys_pk")
+                        @"parameters_prefix": ""
+                    }
+                    member @"domicilio"
+                    {
+                        @"source": ftext("SELECT #<baj.sys('t')>, t.codpos, t.colonia, t.direccion,
+                            t.numint, t.numext, t.notas, t.telefonos, ci.codigo iciudad
+                        FROM domicilio t LEFT JOIN ciudad ci ON t.iciudad=ci.sys_pk ORDER BY t.sys_pk")
+                        @"parameters_prefix": ""
+                    }
+                    member @"cstatusorg"
+                    {
+                        @"source": ftext("SELECT * from cstatusorg")
+                        @"parameters_prefix": ""
+                    }
+                    member @"cliente"
+                    {
+                        @"source": ftext("SELECT #<baj.sys('t')>, t.codigo, t.nombre, t.rfc, t.curp,
+                            t.status, t.limitecredito, t.diascredito, t.saldo,
+                            t.descuento, t.precio, t.email, t.telefonos, t.website,
+                            t.notas, t.codcuenta, t.regfiscal, t.uf_sys_baja,
+                            dv.codigo idivisa, tc.codigo tipo,
+                            z.sys_guid zona, d1.sys_guid domicilio1
+                        FROM cliente t
+                        INNER JOIN divisa dv ON t.idivisa=dv.sys_pk
+                        LEFT  JOIN tipocliente tc ON t.tipo=tc.sys_pk
+                        LEFT  JOIN zona z ON t.zona=z.sys_pk
+                        LEFT  JOIN domicilio d1 ON t.domicilio1=d1.sys_pk
+                        ORDER BY t.sys_pk")
+                        @"parameters_prefix": ""
+                    }
+                    member @"cliente_grupoclientes_"
+                    {
+                        @"source": ftext("SELECT
+                            DATE_FORMAT(t.sys_timestamp,'%Y-%m-%d %H:%i:%s') sys_timestamp,
+                            c.codigo iclientes, g.sys_guid igrupos
+                        FROM cliente_grupoclientes_ t
+                        INNER JOIN cliente c ON t.iclientes=c.sys_pk
+                        INNER JOIN grupoclientes g ON t.igrupos=g.sys_pk
+                        ORDER BY t.sys_pk")
+                        @"parameters_prefix": ""
+                    }
+                }
+                member @"import" 
+                { 
+                    member @"cstatusorg"
+                    {
+                        @"target": "cstatusorg"
+                        @"identity": "id=@id"
+                        @"insert": "*"
+                    }
+                }
+                member @"barrido" { }
+                member @"prelimpieza" { }
+            }
+            do baj.armar(c,"tipocliente|tipocliente|,grupoclientes|grupoclientes|,domicilio|domicilio|iciudad>ciudad.codigo,cliente|cliente|idivisa>divisa.codigo;tipo>tipocliente.codigo;zona>zona.sys_guid;domicilio1>domicilio.sys_guid")
+            do baj.asoc_armar(c,"cliente_grupoclientes_|iclientes>cliente.codigo;igrupos>grupoclientes.sys_guid")
+        }
+
+        //  ---------------------------------------------------------------
+        //  operacion — filtrado por ubicación, con cierre transitivo:
+        //  bajan los almacenes de la ubicación MÁS los referenciados por
+        //  sus centros de consumo y de producción. Si no, baja un centro
+        //  cuyos almacenes no existen y la orden no se puede levantar.
+        //  ---------------------------------------------------------------
+        if lote == "operacion"
+        {
+            new c
+            {
+                @"alcance": "completo"
+                member @"export"
+                {
+                    member @"almacen"
+                    {
+                        @"source": ftext("SELECT #<baj.sys('t')>, t.codigo, t.descripcion, t.codcuenta
+                        FROM almacen t
+                        WHERE t.ubicacion<=>@ubic
+                           OR t.sys_pk IN (SELECT cc.ialmacen FROM cconsumo cc WHERE cc.ubicacion=@ubic)
+                           OR t.sys_pk IN (SELECT cp.almacenmp FROM cproduccion cp WHERE cp.sys_pk IN (#<@baj.cprod_ubic>))
+                           OR t.sys_pk IN (SELECT cp.almacenpt FROM cproduccion cp WHERE cp.sys_pk IN (#<@baj.cprod_ubic>))
+                        ORDER BY t.sys_pk")
+                        @"parameters_prefix": ""
+                    }
+                    member @"cconsumo"
+                    {
+                        @"source": ftext("SELECT #<baj.sys('t')>, t.codigo, t.descripcion,
+                            a.codigo ialmacen
+                        FROM cconsumo t LEFT JOIN almacen a ON t.ialmacen=a.sys_pk
+                        WHERE t.ubicacion<=>@ubic
+                           OR t.sys_pk IN (SELECT ca.centroconsumo FROM caja ca WHERE ca.ubicacion=@ubic)
+                        ORDER BY t.sys_pk")
+                        @"parameters_prefix": ""
+                    }
+                    member @"cproduccion"
+                    {
+                        //  cproduccion NO tiene columna ubicacion: no existe
+                        //  esa relación. Se deriva por los centros de consumo
+                        //  de la ubicación, vía cconsumo_cproduccion_.
+                        @"source": ftext("SELECT #<baj.sys('t')>, t.codigo, t.descripcion,
+                            amp.codigo almacenmp, apt.codigo almacenpt
+                        FROM cproduccion t
+                        INNER JOIN almacen amp ON t.almacenmp=amp.sys_pk
+                        INNER JOIN almacen apt ON t.almacenpt=apt.sys_pk
+                        WHERE true
+                        ORDER BY t.sys_pk")
+                        @"parameters_prefix": ""
+                    }
+                    member @"blockdocumentos"
+                    {
+                        @"source": ftext("SELECT #<baj.sys('t')>, t.documento, t.serie, t.fultimo,
+                            t.finicial, t.activo, t.fiscal, t.datos
+                        FROM blockdocumentos t WHERE t.ubicacion<=>@ubic ORDER BY t.sys_pk")
+                        @"parameters_prefix": ""
+                    }
+                    member @"caja"
+                    {
+                        @"source": ftext("SELECT #<baj.sys('t')>, t.codigo, t.descripcion, t.notas,
+                            t.codcuenta, cc.codigo centroconsumo
+                        FROM caja t
+                        INNER JOIN cconsumo cc ON t.centroconsumo=cc.sys_pk
+                        WHERE t.ubicacion<=>@ubic ORDER BY t.sys_pk")
+                        @"parameters_prefix": ""
+                    }
+                    member @"cajero"
+                    {
+                        @"source": ftext("SELECT #<baj.sys('t')>, t.codigo, t.nombre, t.codnomina,t.contrasena FROM cajero t WHERE t.ubicacion<=>@ubic ORDER BY t.sys_pk")
+                        @"parameters_prefix": ""
+                    }
+                    member @"agente"
+                    {
+                        @"source": ftext("SELECT #<baj.sys('t')>, t.codigo, t.nombre, t.codnomina FROM agente t WHERE t.ubicacion<=>@ubic ORDER BY t.sys_pk")
+                        @"parameters_prefix": ""
+                    }
+                    member @"repartidor"
+                    {
+                        @"source": ftext("SELECT #<baj.sys('t')>, t.codigo, t.nombre, t.codnomina FROM repartidor t WHERE t.ubicacion<=>@ubic ORDER BY t.sys_pk")
+                        @"parameters_prefix": ""
+                    }
+                    member @"porteador"
+                    {
+                        @"source": ftext("SELECT #<baj.sys('t')>, t.codigo, t.descripcion, t.notas
+                                          FROM porteador t ORDER BY t.sys_pk")
+                        @"parameters_prefix": ""
+                    }
+                    //  Asociaciones. Son NmModel y SÍ tienen sys_guid, así que
+                    //  admiten upsert normal: no hace falta borrar y repoblar.
+                    //  Se filtran por lo que ya bajó de sus dos extremos.
+                    member @"cconsumo_cproduccion_"
+                    {
+                        @"source": ftext("SELECT
+                            DATE_FORMAT(t.sys_timestamp,'%Y-%m-%d %H:%i:%s') sys_timestamp,
+                            cp.codigo icproduccion, cc.codigo iconsumo
+                        FROM cconsumo_cproduccion_ t
+                        INNER JOIN cproduccion cp ON t.icproduccion=cp.sys_pk
+                        INNER JOIN cconsumo cc ON t.iconsumo=cc.sys_pk
+                        WHERE cc.ubicacion<=>@ubic
+                           OR cc.sys_pk IN (SELECT ca.centroconsumo FROM caja ca WHERE ca.ubicacion=@ubic)
+                        ORDER BY t.sys_pk")
+                        @"parameters_prefix": ""
+                    }
+                    member @"cproduccion_producto_"
+                    {
+                        @"source": ftext("SELECT
+                            DATE_FORMAT(t.sys_timestamp,'%Y-%m-%d %H:%i:%s') sys_timestamp,
+                            p.codigo iproductos, cp.codigo icentrosproduccion
+                        FROM cproduccion_producto_ t
+                        INNER JOIN producto p ON t.iproductos=p.sys_pk
+                        INNER JOIN cproduccion cp ON t.icentrosproduccion=cp.sys_pk
+                        WHERE true
+                        ORDER BY t.sys_pk")
+                        @"parameters_prefix": ""
+                    }
+                }
+                member @"import" { }
+                member @"barrido" { }
+                member @"prelimpieza" { }
+            }
+            do baj.armar(c,"almacen|almacen|,cconsumo|cconsumo|ialmacen>almacen.codigo,cproduccion|cproduccion|almacenmp>almacen.codigo;almacenpt>almacen.codigo,blockdocumentos|blockdocumentos|,caja|caja|centroconsumo>cconsumo.codigo,cajero|cajero|,agente|agente|,repartidor|repartidor|,porteador|porteador|")
+            do baj.asoc_armar(c,"cconsumo_cproduccion_|icproduccion>cproduccion.codigo;iconsumo>cconsumo.codigo,cproduccion_producto_|iproductos>producto.codigo;icentrosproduccion>cproduccion.codigo")
+        }
+
+        //  ---------------------------------------------------------------
+        //  existencias — completo, con saldo. Ausente significa cero.
+        //
+        //  Va por tabla de paso porque el destino son filas que NO deben
+        //  crearse si el producto no existe: un producto dado de alta en
+        //  la central y aún no bajado se ignora, no se inventa.
+        //  ---------------------------------------------------------------
+        if lote == "existencias"
+        {
+            new c
+            {
+                @"alcance": "completo"
+                @"paso": "pos_tmp_exi"
+                //  Se vacía ANTES de importar: sin columna discriminadora,
+                //  los restos de una corrida que murió a la mitad
+                //  contaminarían el merge de la siguiente.
+                member @"prelimpieza"
+                {
+                    @"exi": "DELETE FROM pos_tmp_exi"
+                }
+                member @"export"
+                {
+                    member @"existencia"
+                    {
+                        //  Se omiten los ceros: su ausencia es el dato.
+                        //  sys_timestamp lleva la marca del lote, no la de
+                        //  la fila, porque el acumulado lo mantiene un
+                        //  disparador y su timestamp no es confiable.
+                        @"source": ftext("SELECT p.codigo producto, a.codigo almacen,
+                            e.existencia, e.saldo,
+                            #<@baj.marca> sys_timestamp
+                        FROM existencias e
+                        INNER JOIN producto p ON e.fk_producto_iexistencias=p.sys_pk
+                        INNER JOIN almacen  a ON e.ialmacen=a.sys_pk
+                        WHERE (a.ubicacion<=>@ubic
+                               OR a.sys_pk IN (SELECT cc.ialmacen FROM cconsumo cc WHERE cc.ubicacion=@ubic)
+                               OR a.sys_pk IN (SELECT cp.almacenmp FROM cproduccion cp WHERE cp.sys_pk IN (#<@baj.cprod_ubic>))
+                               OR a.sys_pk IN (SELECT cp.almacenpt FROM cproduccion cp WHERE cp.sys_pk IN (#<@baj.cprod_ubic>)))
+                          AND (IFNULL(e.existencia,0)<>0 OR IFNULL(e.saldo,0)<>0)
+                        ORDER BY a.codigo, p.codigo")
+                        @"parameters_prefix": ""
+                    }
+                }
+                member @"import"
+                {
+                    member @"existencia"
+                    {
+                        @"target": "pos_tmp_exi"
+                        @"identity": "producto=@producto AND almacen=@almacen"
+                        @"insert": "*"
+                    }
+                }
+                //  Merge: sólo pares que la local conoce. Lo que no resuelve
+                //  se ignora y el programa lo cuenta.
+                member @"merge"
+                {
+                    //  Alta: crea la fila en existencias para los pares que
+                    //  la local ya conoce (producto y almacén existen) pero
+                    //  que aún no tienen fila propia — el caso típico de la
+                    //  primera bajada tras instalar, o un producto que nunca
+                    //  tuvo movimiento local. Sin esto, el UPDATE de abajo no
+                    //  tiene fila que tocar y la existencia se pierde en
+                    //  silencio.
+                    @"existencia_alta": "INSERT INTO existencias
+                        (sys_guid, sys_timestamp, sys_dtcreated, existencia, saldo, ialmacen, fk_producto_iexistencias)
+                    SELECT REPLACE(UUID(),'-',''), @marca, NOW(), t.existencia, t.saldo, a.sys_pk, p.sys_pk
+                    FROM pos_tmp_exi t
+                    INNER JOIN producto p ON p.codigo=t.producto
+                    INNER JOIN almacen  a ON a.codigo=t.almacen
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM existencias e
+                         WHERE e.fk_producto_iexistencias=p.sys_pk
+                           AND e.ialmacen=a.sys_pk)"
+
+                    @"existencia": "UPDATE existencias e
+                    INNER JOIN producto p ON e.fk_producto_iexistencias=p.sys_pk
+                    INNER JOIN almacen  a ON e.ialmacen=a.sys_pk
+                    INNER JOIN pos_tmp_exi t ON t.producto=p.codigo AND t.almacen=a.codigo
+                    SET e.existencia=t.existencia, e.saldo=t.saldo, e.sys_timestamp=@marca
+                        WHERE e.sys_timestamp < @marca"
+                }
+                //  Barrido: cero a lo no recibido, sin tocar lo que un acuse
+                //  más fresco acaba de escribir.
+                @"barrido_sql": "UPDATE existencias e
+                    INNER JOIN producto p ON e.fk_producto_iexistencias=p.sys_pk
+                    INNER JOIN almacen  a ON e.ialmacen=a.sys_pk
+                    SET e.existencia=0, e.saldo=0, e.sys_timestamp=@marca
+                    WHERE e.sys_timestamp < @marca
+                      AND NOT EXISTS (SELECT 1 FROM pos_tmp_exi t
+                                       WHERE t.producto=p.codigo AND t.almacen=a.codigo)"
+                //  Total por producto: suma de Existencia en todos los
+                //  almacenes de esta ubicación. Va DESPUÉS de barrido_sql
+                //  (arriba) y recorre TODA la tabla, no sólo lo que trajo el
+                //  lote, porque el barrido puede haber puesto en cero un
+                //  producto que no vino, y eso también cambia la suma.
+                member @"barrido"
+                {
+                    @"totales": "UPDATE producto p
+                        LEFT JOIN (SELECT fk_producto_iexistencias, SUM(existencia) total
+                                     FROM existencias GROUP BY fk_producto_iexistencias) s
+                               ON s.fk_producto_iexistencias = p.sys_pk
+                        SET p.Existencia = IFNULL(s.total,0)"
+                }
+                member @"limpieza"
+                {
+                    @"exi": "DELETE FROM pos_tmp_exi"
+                }
+                //  ignorados: catálogo atrasado de verdad (producto o
+                //  almacén que la local aún no conoce). Ya NO exige que
+                //  exista la fila en existencias: eso ahora lo crea el alta
+                //  de arriba, así que no debe seguir contando como ignorado.
+                @"ignorados": "SELECT COUNT(*) FROM pos_tmp_exi t WHERE
+                    NOT EXISTS (SELECT 1 FROM producto p WHERE p.codigo=t.producto)
+                    OR NOT EXISTS (SELECT 1 FROM almacen a WHERE a.codigo=t.almacen)"
+            }
+        }
+
+        //  ---------------------------------------------------------------
+        //  saldos — completo. Barato: pocos clientes con crédito.
+        //  Tabla de paso propia, para no colisionar con existencias.
+        //  ---------------------------------------------------------------
+        if lote == "saldos"
+        {
+            new c
+            {
+                @"alcance": "completo"
+                @"paso": "pos_tmp_sal"
+                //  Se vacía ANTES de importar: sin columna discriminadora,
+                //  los restos de una corrida que murió a la mitad
+                //  contaminarían el merge de la siguiente.
+                member @"prelimpieza"
+                {
+                    @"sal": "DELETE FROM pos_tmp_sal"
+                }
+                member @"export"
+                {
+                    member @"saldo_cliente"
+                    {
+                        @"source": ftext("SELECT c.codigo cliente, c.saldo,
+                            #<@baj.marca> sys_timestamp
+                        FROM cliente c WHERE IFNULL(c.saldo,0)<>0 ORDER BY c.codigo")
+                        @"parameters_prefix": ""
+                    }
+                }
+                member @"import"
+                {
+                    member @"saldo_cliente"
+                    {
+                        @"target": "pos_tmp_sal"
+                        @"identity": "cliente=@cliente"
+                        @"insert": "*"
+                    }
+                }
+                member @"merge"
+                {
+                    @"saldo_cliente": "UPDATE cliente c
+                    INNER JOIN pos_tmp_sal t ON t.cliente=c.codigo
+                    SET c.saldo=t.saldo, c.sys_timestamp=@marca
+                        WHERE c.sys_timestamp < @marca"
+                }
+                @"barrido_sql": "UPDATE cliente c SET c.saldo=0, c.sys_timestamp=@marca
+                    WHERE c.sys_timestamp < @marca
+                      AND NOT EXISTS (SELECT 1 FROM pos_tmp_sal t WHERE t.cliente=c.codigo)"
+                member @"limpieza"
+                {
+                    @"sal": "DELETE FROM pos_tmp_sal"
+                }
+                @"ignorados": "SELECT COUNT(*) FROM pos_tmp_sal t WHERE 1=1
+                    AND NOT EXISTS (SELECT 1 FROM cliente c WHERE c.codigo=t.cliente)"
+            }
+        }
+
+        //  ---------------------------------------------------------------
+        //  precios — las 20 columnas de producto, sin barrido: un producto
+        //  que no viene conserva su precio. Y precioventa, que sí barre:
+        //  un precio especial retirado en la central debe desaparecer, o
+        //  el cliente sigue comprando al precio viejo indefinidamente.
+        //  ---------------------------------------------------------------
+        if lote == "precios"
+        {
+            new c
+            {
+                @"alcance": "completo"
+                @"paso": "pos_tmp_pre"
+                //  Se vacía ANTES de importar: sin columna discriminadora,
+                //  los restos de una corrida que murió a la mitad
+                //  contaminarían el merge de la siguiente.
+                member @"prelimpieza"
+                {
+                    @"pre": "DELETE FROM pos_tmp_pre"
+                }
+                member @"export"
+                {
+                    member @"producto_precio"
+                    {
+                        //  Los 20 precios reales del modelo: precio1..precio5
+                        //  y precio106..precio120.
+                        @"source": ftext("SELECT p.codigo producto,
+                            p.precio1,p.precio2,p.precio3,p.precio4,p.precio5,p.precio106,p.precio107,p.precio108,p.precio109,p.precio110,p.precio111,p.precio112,p.precio113,p.precio114,p.precio115,p.precio116,p.precio117,p.precio118,p.precio119,p.precio120,
+                            #<@baj.marca> sys_timestamp
+                        FROM producto p ORDER BY p.codigo")
+                        @"parameters_prefix": ""
+                    }
+                    member @"precioventa"
+                    {
+                        @"source": ftext("SELECT #<baj.sys('t')>, t.precio, t.limite,
+                            pr.codigo producto, c.codigo fk_cliente_listaprecios
+                        FROM precioventa t
+                        INNER JOIN producto pr ON t.producto=pr.sys_pk
+                        INNER JOIN cliente  c ON t.fk_cliente_listaprecios=c.sys_pk
+                        ORDER BY t.sys_pk")
+                        @"parameters_prefix": ""
+                    }
+                }
+                member @"import"
+                {
+                    member @"producto_precio"
+                    {
+                        @"target": "pos_tmp_pre"
+                        @"identity": "producto=@producto"
+                        @"insert": "*"
+                    }
+                    member @"precioventa"
+                    {
+                        @"target": "precioventa"
+                        @"identity": "sys_guid=@sys_guid"
+                        @"insert": "*"
+                        @"update_if": @baj.newer
+                        @"after": "INSERT IGNORE INTO pos_bajada_rec (lote,entidad,sys_guid) VALUES (@__origen,'precioventa',@sys_guid)"
+                        member @"queryfields"
+                        {
+                            @"producto": "SELECT sys_pk FROM producto WHERE codigo=@producto"
+                            @"fk_cliente_listaprecios": "SELECT sys_pk FROM cliente WHERE codigo=@fk_cliente_listaprecios"
+                        }
+                    }
+                }
+                member @"merge"
+                {
+                    @"producto_precio": "UPDATE producto p
+                    INNER JOIN pos_tmp_pre t ON t.producto=p.codigo
+                    SET p.precio1=t.precio1,
+                        p.precio2=t.precio2,
+                        p.precio3=t.precio3,
+                        p.precio4=t.precio4,
+                        p.precio5=t.precio5,
+                        p.precio106=t.precio106,
+                        p.precio107=t.precio107,
+                        p.precio108=t.precio108,
+                        p.precio109=t.precio109,
+                        p.precio110=t.precio110,
+                        p.precio111=t.precio111,
+                        p.precio112=t.precio112,
+                        p.precio113=t.precio113,
+                        p.precio114=t.precio114,
+                        p.precio115=t.precio115,
+                        p.precio116=t.precio116,
+                        p.precio117=t.precio117,
+                        p.precio118=t.precio118,
+                        p.precio119=t.precio119,
+                        p.precio120=t.precio120,
+                        p.sys_timestamp=@marca
+                        WHERE p.sys_timestamp < @marca"
+                }
+                @"barrido_sql": "DELETE IGNORE FROM precioventa
+                    WHERE sys_timestamp < @marca
+                      AND sys_guid NOT IN (SELECT r.sys_guid FROM pos_bajada_rec r
+                                            WHERE r.lote=@lote AND r.entidad='precioventa')"
+                member @"limpieza"
+                {
+                    @"pre": "DELETE FROM pos_tmp_pre"
+                }
+                @"ignorados": "SELECT COUNT(*) FROM pos_tmp_pre t WHERE 1=1
+                    AND NOT EXISTS (SELECT 1 FROM producto p WHERE p.codigo=t.producto)"
+            }
+        }
+
+        //  ---------------------------------------------------------------
+        //  acuse — lo que un paquete movió. PARCIAL: la ausencia de un par
+        //  no significa nada, así que no barre. Lo genera la central dentro
+        //  del ciclo de rmt-tx; aquí sólo vive la mitad que aplica.
+        //
+        //  Reusa las tablas de paso de existencias y saldos, aisladas por
+        //  la columna `lote`: dos corridas simultáneas no se pisan.
+        //  ---------------------------------------------------------------
+        if lote == "acuse"
+        {
+            new c
+            {
+                @"alcance": "parcial"
+                member @"prelimpieza"
+                {
+                    @"exi": "DELETE FROM pos_tmp_acu_exi"
+                    @"sal": "DELETE FROM pos_tmp_acu_sal"
+                }
+                member @"import"
+                {
+                    member @"existencia"
+                    {
+                        @"target": "pos_tmp_acu_exi"
+                        @"identity": "producto=@producto AND almacen=@almacen"
+                        @"insert": "*"
+                    }
+                    member @"saldo_cliente"
+                    {
+                        @"target": "pos_tmp_acu_sal"
+                        @"identity": "cliente=@cliente"
+                        @"insert": "*"
+                    }
+                }
+                member @"merge"
+                {
+                    @"existencia": "UPDATE existencias e
+                        INNER JOIN producto p ON e.fk_producto_iexistencias=p.sys_pk
+                        INNER JOIN almacen  a ON e.ialmacen=a.sys_pk
+                        INNER JOIN pos_tmp_acu_exi t ON t.producto=p.codigo AND t.almacen=a.codigo
+                        SET e.existencia=t.existencia, e.saldo=t.saldo, e.sys_timestamp=@marca
+                        WHERE e.sys_timestamp < @marca"
+                    @"saldo_cliente": "UPDATE cliente c
+                        INNER JOIN pos_tmp_acu_sal t ON t.cliente=c.codigo
+                        SET c.saldo=t.saldo, c.sys_timestamp=@marca
+                        WHERE c.sys_timestamp < @marca"
+                }
+                member @"limpieza"
+                {
+                    @"exi": "DELETE FROM pos_tmp_acu_exi"
+                    @"sal": "DELETE FROM pos_tmp_acu_sal"
+                }
+            }
+        }
+
+        return c
+    }
+}

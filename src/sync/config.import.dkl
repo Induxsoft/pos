@@ -1,0 +1,343 @@
+#include "dkli.dkh"
+#!
+//  ===================================================================
+//  POS Sync — configuración de importación FTT
+//  ===================================================================
+//
+//  Sólo mueve el papel: inserta y actualiza filas. NO afecta
+//  existencias, NO valúa, NO genera cardex ni cuentas por cobrar.
+//  Eso es trabajo de la central, con su propia transaccionalidad y su
+//  propio orden, y se hace después de que el paquete entró completo.
+//
+//  Reglas transversales:
+//
+//  1. identity SIEMPRE por sys_guid, que es unique required en todo el
+//     modelo (viene del abstracto TableModel). Sin punto y coma final:
+//     el motor concatena " AND <update_if>" justo después.
+//
+//  2. update_if descarta lo viejo. Si la versión que llega no es más
+//     nueva que la almacenada, el UPDATE afecta cero filas y el
+//     documento se descarta sin error. Es lo que hace que el orden de
+//     llegada sea irrelevante.
+//
+//  3. venta y orden registran su paso en pos_paquete_trans desde el
+//     `after`, usando los parámetros globales @__origen y @__location_id
+//     que el importador inyecta. Una fila por transacción trazable, sin
+//     recorrer el paquete por segunda vez. Lo demás se reconstruye desde
+//     ahí o es irrelevante para la respuesta de existencias.
+//
+//  4. Toda foránea se resuelve por CÓDIGO contra el catálogo del
+//     destino, o por sys_guid cuando apunta a un documento del propio
+//     paquete. Nunca por sys_pk, que es de alcance local.
+module ""
+{
+    //  ---------------------------------------------------------------
+    //  Regla de versión
+    //
+    //  sys_timestamp es el criterio PRIMARIO. V12 mantiene sys_recver
+    //  de forma confiable — es su control de concurrencia optimista —
+    //  pero R5 no, y un contador que no avanza haría que todo cambio
+    //  posterior se descartara en silencio.
+    //
+    //  El "<=" es deliberado: con precisión de segundos, dos escrituras
+    //  dentro del mismo segundo empatan y gana la que llega. Aplicar de
+    //  más cuesta una escritura; descartar de más pierde un dato.
+    //  ---------------------------------------------------------------
+    @sync.newer = "sys_timestamp <= @sys_timestamp"
+
+    //  Variante para origen V12, donde sys_recver sí es confiable.
+    //  Sustituir @sync.newer por ésta si ambos extremos son V12.
+    @sync.newer_v12 = "(IFNULL(sys_recver,0) < IFNULL(@sys_recver,0)
+                        OR (IFNULL(sys_recver,0) = IFNULL(@sys_recver,0)
+                            AND sys_timestamp <= @sys_timestamp))"
+
+    //  ---------------------------------------------------------------
+    //  Sub-árbol de producción, idéntico bajo una venta y bajo la raíz
+    //  de órdenes sueltas.
+    //  ---------------------------------------------------------------
+    sync.imp_childs_orden ::
+    {
+        new c
+        {
+            member "dorden"
+            {
+                @"target": "dorden"
+                @"identity": "sys_guid=@sys_guid"
+                @"insert": "*"
+                @"update_if": @sync.newer
+                member @"queryfields"
+                {
+                    @"idivisa":          "SELECT sys_pk FROM divisa   WHERE codigo=@idivisa"
+                    @"iproducto":        "SELECT sys_pk FROM producto WHERE codigo=@iproducto"
+                    @"fk_orden_detalle": "SELECT sys_pk FROM orden    WHERE sys_guid=@fk_orden_detalle"
+                }
+
+                member @"childs"
+                {
+                    member "dcantidades"
+                    {
+                        @"target": "dcantidades"
+                        @"identity": "sys_guid=@sys_guid"
+                        @"insert": "*"
+                        @"update_if": @sync.newer
+                        member @"queryfields"
+                        {
+                            @"iproducto": "SELECT sys_pk FROM producto WHERE codigo=@iproducto"
+                            @"fk_dorden_cantidadesvariadas": "SELECT sys_pk FROM dorden WHERE sys_guid=@fk_dorden_cantidadesvariadas"
+                        }
+                    }
+                    member "dadicionales"
+                    {
+                        @"target": "dadicionales"
+                        @"identity": "sys_guid=@sys_guid"
+                        @"insert": "*"
+                        @"update_if": @sync.newer
+                        member @"queryfields"
+                        {
+                            @"iproducto": "SELECT sys_pk FROM producto WHERE codigo=@iproducto"
+                            @"fk_dorden_adicionales": "SELECT sys_pk FROM dorden WHERE sys_guid=@fk_dorden_adicionales"
+                        }
+                    }
+                }
+            }
+        }
+        return c
+    }
+
+    sync.config_import ::
+    {
+        new config
+        {
+            //  ===================== RAÍZ 1: corte =====================
+            member @"corte"
+            {
+                @"target": "corte"
+                @"identity": "sys_guid=@sys_guid"
+                @"insert": "*"
+                @"update_if": @sync.newer
+                member @"queryfields"
+                {
+                    @"icaja":   "SELECT sys_pk FROM caja   WHERE codigo=@icaja"
+                    @"icajero": "SELECT sys_pk FROM cajero WHERE codigo=@icajero"
+                }
+
+                member @"childs"
+                {
+                    //  movcaja va antes que foliosdocumentos: el motor
+                    //  recorre los hijos en el orden en que vienen, y
+                    //  venta.imovcaja necesita el movimiento ya insertado.
+                    member "movcaja"
+                    {
+                        @"target": "movcaja"
+                        @"identity": "sys_guid=@sys_guid"
+                        @"insert": "*"
+                        @"update_if": @sync.newer
+                        @"auto_transaction": @true
+                        member @"queryfields"
+                        {
+                            @"icategoria": "SELECT sys_pk FROM categoria WHERE codigo=@icategoria"
+                            @"icorte":     "SELECT sys_pk FROM corte     WHERE sys_guid=@icorte"
+                            @"idivisa":    "SELECT sys_pk FROM divisa    WHERE codigo=@idivisa"
+                        }
+
+                        member @"childs"
+                        {
+                            member "dtarjeta"
+                            {
+                                @"target": "dtarjeta"
+                                @"identity": "sys_guid=@sys_guid"
+                                @"insert": "*"
+                                @"update_if": @sync.newer
+                                member @"queryfields"
+                                {
+                                    @"idivisa": "SELECT sys_pk FROM divisa WHERE codigo=@idivisa"
+                                    @"tipo":    "SELECT sys_pk FROM tarjetacredito WHERE codigo=@tipo"
+                                    @"retiro":  "SELECT sys_pk FROM movcaja WHERE sys_guid=@retiro"
+                                    @"fk_movcaja_detalletarjetas": "SELECT sys_pk FROM movcaja WHERE sys_guid=@fk_movcaja_detalletarjetas"
+                                }
+                            }
+                            member "ddepositos"
+                            {
+                                @"target": "ddepositos"
+                                @"identity": "sys_guid=@sys_guid"
+                                @"insert": "*"
+                                @"update_if": @sync.newer
+                                member @"queryfields"
+                                {
+                                    @"idivisa": "SELECT sys_pk FROM divisa WHERE codigo=@idivisa"
+                                    @"retiro":  "SELECT sys_pk FROM movcaja WHERE sys_guid=@retiro"
+                                    @"fk_movcaja_detalledepositos": "SELECT sys_pk FROM movcaja WHERE sys_guid=@fk_movcaja_detalledepositos"
+                                }
+                            }
+                            member "dcheques"
+                            {
+                                @"target": "dcheques"
+                                @"identity": "sys_guid=@sys_guid"
+                                @"insert": "*"
+                                @"update_if": @sync.newer
+                                member @"queryfields"
+                                {
+                                    @"idivisa": "SELECT sys_pk FROM divisa WHERE codigo=@idivisa"
+                                    @"retiro":  "SELECT sys_pk FROM movcaja WHERE sys_guid=@retiro"
+                                    @"fk_movcaja_detallecheques": "SELECT sys_pk FROM movcaja WHERE sys_guid=@fk_movcaja_detallecheques"
+                                }
+                            }
+                            member "dvales"
+                            {
+                                @"target": "dvales"
+                                @"identity": "sys_guid=@sys_guid"
+                                @"insert": "*"
+                                @"update_if": @sync.newer
+                                member @"queryfields"
+                                {
+                                    @"idivisa": "SELECT sys_pk FROM divisa WHERE codigo=@idivisa"
+                                    @"retiro":  "SELECT sys_pk FROM movcaja WHERE sys_guid=@retiro"
+                                    @"fk_movcaja_detallevales": "SELECT sys_pk FROM movcaja WHERE sys_guid=@fk_movcaja_detallevales"
+                                }
+                            }
+                        }
+                    }
+
+                    member "dcxc"
+                    {
+                        @"target": "dcxc"
+                        @"identity": "sys_guid=@sys_guid"
+                        @"insert": "*"
+                        @"update_if": @sync.newer
+                        member @"queryfields"
+                        {
+                            @"icliente": "SELECT sys_pk FROM cliente WHERE codigo=@icliente"
+                            @"imovcaja": "SELECT sys_pk FROM movcaja WHERE sys_guid=@imovcaja"
+                        }
+                    }
+
+                    member "foliosdocumentos"
+                    {
+                        @"target": "foliosdocumentos"
+                        //  El OR por (folio, block) es necesario: el bloque
+                        //  es una fila distinta en cada base, así que el
+                        //  sys_guid del folio puede no coincidir y el índice
+                        //  único idx_foliodoc rechazaría el INSERT.
+                        //  Los paréntesis son obligatorios: el motor añade
+                        //  " AND <update_if>" y sin ellos la precedencia
+                        //  quedaría mal.
+                        @"identity": "(sys_guid=@sys_guid OR (folio=@folio AND block=@block))"
+                        @"insert": "*"
+                        @"update_if": @sync.newer
+                        @"after": "UPDATE blockdocumentos SET fultimo=(SELECT IFNULL(MAX(f.folio),0) FROM foliosdocumentos f WHERE f.block=@block) WHERE sys_pk=@block"
+                        member @"queryfields"
+                        {
+                            @"block": "SELECT sys_pk FROM blockdocumentos WHERE CONCAT(documento,'-',serie)=@block"
+                        }
+
+                        member @"childs"
+                        {
+                            member "venta"
+                            {
+                                @"target": "venta"
+                                @"identity": "sys_guid=@sys_guid"
+                                @"insert": "*"
+                                @"update_if": @sync.newer
+                                @"auto_transaction": @true
+                                @"after": "INSERT IGNORE INTO pos_paquete_trans (origen,location_id,transaccion,transaccionid,aplicado) VALUES (@__origen,@__location_id,'venta',@sys_guid,NOW())"
+                                member @"queryfields"
+                                {
+                                    @"icliente":    "SELECT sys_pk FROM cliente    WHERE codigo=@icliente"
+                                    @"ifolio":      "SELECT sys_pk FROM foliosdocumentos WHERE sys_guid=@ifolio"
+                                    @"icconsumo":   "SELECT sys_pk FROM cconsumo   WHERE codigo=@icconsumo"
+                                    @"iagente":     "SELECT sys_pk FROM agente     WHERE codigo=@iagente"
+                                    @"icaja":       "SELECT sys_pk FROM caja       WHERE codigo=@icaja"
+                                    @"idivisa":     "SELECT sys_pk FROM divisa     WHERE codigo=@idivisa"
+                                    @"imovcaja":    "SELECT sys_pk FROM movcaja    WHERE sys_guid=@imovcaja"
+                                    @"iporteador":  "SELECT sys_pk FROM porteador  WHERE codigo=@iporteador"
+                                    @"irepartidor": "SELECT sys_pk FROM repartidor WHERE codigo=@irepartidor"
+                                    @"icorte":      "SELECT sys_pk FROM corte      WHERE sys_guid=@icorte"
+                                    @"aplicadoa":   "SELECT sys_pk FROM venta      WHERE sys_guid=@aplicadoa"
+                                }
+
+                                member @"childs"
+                                {
+                                    member "dventa"
+                                    {
+                                        @"target": "dventa"
+                                        @"identity": "sys_guid=@sys_guid"
+                                        @"insert": "*"
+                                        @"update_if": @sync.newer
+                                        member @"queryfields"
+                                        {
+                                            @"fk_venta_detalle": "SELECT sys_pk FROM venta    WHERE sys_guid=@fk_venta_detalle"
+                                            @"iproducto":        "SELECT sys_pk FROM producto WHERE codigo=@iproducto"
+                                            @"ialmacen":         "SELECT sys_pk FROM almacen  WHERE codigo=@ialmacen"
+                                            @"documento":        "SELECT sys_pk FROM venta    WHERE sys_guid=@documento"
+                                        }
+                                    }
+
+                                    member "dcxc"
+                                    {
+                                        @"target": "dcxc"
+                                        @"identity": "sys_guid=@sys_guid"
+                                        @"insert": "*"
+                                        @"update_if": @sync.newer
+                                        member @"queryfields"
+                                        {
+                                            @"icliente": "SELECT sys_pk FROM cliente WHERE codigo=@icliente"
+                                            @"iventa":   "SELECT sys_pk FROM venta   WHERE sys_guid=@iventa"
+                                            @"ifolio":   "SELECT sys_pk FROM foliosdocumentos WHERE sys_guid=@ifolio"
+                                            @"imovcaja": "SELECT sys_pk FROM movcaja WHERE sys_guid=@imovcaja"
+                                        }
+                                    }
+
+                                    member "orden"
+                                    {
+                                        @"target": "orden"
+                                        @"identity": "sys_guid=@sys_guid"
+                                        @"insert": "*"
+                                        @"update_if": @sync.newer
+                                        @"auto_transaction": @true
+                                        @"after": "INSERT IGNORE INTO pos_paquete_trans (origen,location_id,transaccion,transaccionid,aplicado) VALUES (@__origen,@__location_id,'orden',@sys_guid,NOW())"
+                                        member @"queryfields"
+                                        {
+                                            @"iagente":      "SELECT sys_pk FROM agente      WHERE codigo=@iagente"
+                                            @"icconsumo":    "SELECT sys_pk FROM cconsumo    WHERE codigo=@icconsumo"
+                                            @"icproduccion": "SELECT sys_pk FROM cproduccion WHERE codigo=@icproduccion"
+                                            @"idivisa":      "SELECT sys_pk FROM divisa      WHERE codigo=@idivisa"
+                                            @"iventa":       "SELECT sys_pk FROM venta       WHERE sys_guid=@iventa"
+                                        }
+                                        member @"childs" { }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            //  ============ RAÍZ 2: órdenes sin venta ============
+            //  Mismo target que "orden", distinto nombre de miembro:
+            //  el type del paquete es la llave de búsqueda de la
+            //  configuración, y esta rama no trae iventa.
+            member @"orden_sl"
+            {
+                @"target": "orden"
+                @"identity": "sys_guid=@sys_guid"
+                @"insert": "*"
+                @"update_if": @sync.newer
+                @"auto_transaction": @true
+                @"after": "INSERT IGNORE INTO pos_paquete_trans (origen,location_id,transaccion,transaccionid,aplicado) VALUES (@__origen,@__location_id,'orden',@sys_guid,NOW())"
+                member @"queryfields"
+                {
+                    @"iagente":      "SELECT sys_pk FROM agente      WHERE codigo=@iagente"
+                    @"icconsumo":    "SELECT sys_pk FROM cconsumo    WHERE codigo=@icconsumo"
+                    @"icproduccion": "SELECT sys_pk FROM cproduccion WHERE codigo=@icproduccion"
+                    @"idivisa":      "SELECT sys_pk FROM divisa      WHERE codigo=@idivisa"
+                }
+                member @"childs" { }
+            }
+        }
+
+        config<"corte/childs/foliosdocumentos/childs/venta/childs/orden/childs*">: sync.imp_childs_orden()
+        config<"orden_sl/childs*">: sync.imp_childs_orden()
+
+        return config
+    }
+}
