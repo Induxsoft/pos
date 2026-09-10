@@ -96,6 +96,15 @@ module "ftt.export"
     #!
     dbr.ftt.export :: &db, &config
     {
+        return dbr.ftt.export.px(db, config, @null)
+    }
+
+    #!
+    //Igual que dbr.ftt.export, pero admite parámetros iniciales que bajan
+    //a la consulta raíz y de ahí, por merge_params, a todo el árbol.
+    //Es lo que permite filtrar una exportación por ubicación.
+    dbr.ftt.export.px :: &db, &config, &params
+    {
         ref l=list.create_from_fields(config)
 
         new result
@@ -108,7 +117,7 @@ module "ftt.export"
 
         for i=0;i<list.count(l)
         {
-            do list.add(transactions, dbr.ftt.export.trans(db,list.str(l,i), field.obj(config,list.str(l,i)),@null))
+            do list.add(transactions, dbr.ftt.export.trans(db,list.str(l,i), field.obj(config,list.str(l,i)),params))
         }
 
         result<"transactions*">:transactions
@@ -136,7 +145,18 @@ module "ftt.export"
     }
 
     #!
+    //Envoltura compatible: las llamadas existentes de 3 argumentos
+    //siguen funcionando sin cambios.
     dbr.ftt.import.trans:: &db, &trans,&config
+    {
+        do dbr.ftt.import.trans.px(db, trans, config, @null)
+    }
+
+    #!
+    //Igual que dbr.ftt.import.trans, pero admite un registro de parámetros
+    //globales que permea a todos los niveles del árbol y queda disponible
+    //para before, on_insert, on_update y after.
+    dbr.ftt.import.trans.px:: &db, &trans,&config, &params
     {
         if isnull(config){ return }
         if trim(field.dstr(config,"identity",""))=="" { return }
@@ -169,6 +189,30 @@ module "ftt.export"
 
             do dbr.ftt.remove_fields(row_rec, field.dstr(config,"exclude",""))
 
+            //Campos que vienen de los parámetros globales y SÍ son columnas
+            //del destino. Se copian a row_rec ANTES del identity, para que
+            //la búsqueda y el insert los vean por igual.
+            //
+            //Lo usan las tablas de paso de las bajadas, cuya columna `lote`
+            //no viaja en el payload: es el id del lote, que aísla a dos
+            //corridas simultáneas del mismo programa.
+            pf = field.dstr(config,"params_fields","")
+            if pf!="" && not(isnull(params))
+            {
+                ref lpf = split(pf,",")
+                for pi=0; pi<list.count(lpf)
+                {
+                    nm = trim(list.str(lpf,pi))
+                    if nm!="" { row_rec<nm>: field.str(params,nm) }
+                }
+            }
+
+            //El resto de los parámetros globales se une SOLO para los
+            //ganchos. No entran a row_rec: no son columnas del destino y
+            //romperían el insert.
+            ref p_row=row_rec
+            if not(isnull(params)) { ref p_row=dbr.ftt.merge_params(params,"",row_rec) }
+
             // before
 
             start_trans=@false
@@ -182,7 +226,7 @@ module "ftt.export"
                 }
             }
 
-            if field.dstr(config,"before","")!="" { do dbr.execute(db,field.str(config,"before"),row_rec) }
+            if field.dstr(config,"before","")!="" { do dbr.execute(db,field.str(config,"before"),p_row) }
             
             if isnull(dbr.rec(db,"select * from "+field.str(config,"target")+" where "+field.str(config,"identity"),row_rec))
             {
@@ -194,7 +238,7 @@ module "ftt.export"
                 // Insertar
                 do dbr.insert(db, field.str(config,"target"),row_rec)
                 
-                if field.dstr(config,"on_insert","")!="" { do dbr.execute(db,field.str(config,"on_insert"),row_rec) }
+                if field.dstr(config,"on_insert","")!="" { do dbr.execute(db,field.str(config,"on_insert"),p_row) }
             }
             else
             {
@@ -212,7 +256,7 @@ module "ftt.export"
                 }
                 
                 do dbr.update(db, field.str(config,"target"),row_rec,field.str(config,"identity") + updateif,row_rec)
-                if field.dstr(config,"on_update","")!="" { do dbr.execute(db,field.str(config,"on_update"),row_rec) }
+                if field.dstr(config,"on_update","")!="" { do dbr.execute(db,field.str(config,"on_update"),p_row) }
             }
 
             if field.exist(row_data,"childs")
@@ -223,13 +267,13 @@ module "ftt.export"
                     for j=0;j<list.count(childs)
                     {
                         ref child=list.obj(childs,j)
-                        do dbr.ftt.import.trans(db, child, field.dobj(config,"childs/"+field.str(child,"type"),@null))
+                        do dbr.ftt.import.trans.px(db, child, field.dobj(config,"childs/"+field.str(child,"type"),@null), params)
                     }
                 }
             }
 
             // after
-            if field.dstr(config,"after","")!="" { do dbr.execute(db,field.str(config,"after"),row_rec) }
+            if field.dstr(config,"after","")!="" { do dbr.execute(db,field.str(config,"after"),p_row) }
             
             if start_trans
             {
@@ -263,13 +307,32 @@ module "ftt.export"
     #!
     dbr.ftt.import :: &db, &data, &config
     {
+        do dbr.ftt.import.px(db, data, config, @null)
+    }
+
+    #!
+    //Importa un paquete inyectando parámetros globales. El registro que se
+    //pase en `params` queda disponible como @campo en before, on_insert,
+    //on_update y after de CUALQUIER nivel del árbol.
+    //
+    //  new p
+    //  {
+    //      @"__origen": field.str(data,"uuid")
+    //      @"__location_id": ubic
+    //  }
+    //  do dbr.ftt.import.px(db, data, config, p)
+    //
+    //Si un miembro declara "params_fields", esos parámetros además se
+    //copian como columnas de la fila antes del identity y del insert.
+    dbr.ftt.import.px :: &db, &data, &config, &params
+    {
         ref trans=field.obj(data,"transactions")
 
         for i=0;i<list.count(trans)
         {
             ref tr=list.obj(trans,i)
 
-            do dbr.ftt.import.trans(db,tr ,field.dobj(config,field.str(tr,"type"),@null))
+            do dbr.ftt.import.trans.px(db,tr ,field.dobj(config,field.str(tr,"type"),@null), params)
         }      
     }
 }

@@ -1,0 +1,117 @@
+#include "dkli.dkh"
+#!
+//  ===================================================================
+//  POS Sync — punto final de la central
+//  ===================================================================
+//
+//  Va en pos/_services/sync-v12/index.dkl
+//
+//  Un solo punto final para todas las operaciones. Siempre POST: un GET
+//  que devolviera un lote de 15,000 filas tendría problemas de caché y
+//  de longitud de URL, y no ganaría nada.
+//
+//  Sobre de entrada:
+//    { "op":"tx"|"baja"|"ping",
+//      "ubicacion":"SUC01",          para cotejo contra el token
+//      "agente":"1.0.0",
+//      "lote":"existencias",         sólo op=baja
+//      "paquete":{ FTT } }           sólo op=tx
+//
+//  Sobre de salida:
+//    { "success":true, "op":"tx", "ubicacion":"SUC01",
+//      "servidor":"2026-09-08T20:05:14",
+//      "acuse":{ FTT },              op=tx
+//      "lote":{ FTT } }              op=baja
+//
+//  En error, el patrón de la casa: { "success":false, "message":"..." }.
+//  Ese texto es casi todo el diagnóstico que va a tener el técnico del
+//  punto, porque no hay reintentos de este lado.
+module "POS Sync Services"
+{
+    #include "functions.dkh"
+    #include "serialize.dkh"
+    #include "webcl.dkh"
+    #include "dbr.dkh"
+    #include "dbr.vars.dkl"
+    #include "dbr.apps.dkl"
+    #include "dbr.folios.dkl"
+    #include "dbr.events.dkl"
+    #include "dbr.security.dkl"
+    #include "website.dkl"
+    #include "dbr.ftt.dkl"
+    #include "sync/config.import.dkl"
+    #include "sync/config.bajada.dkl"
+    #include "./sync.svc.dk"
+    #include "dprod/dprod.dk"
+    #include "inventario/movimientos.dkh"
+
+    go api_base_service(method:method, params:params, payload:sobre, response:response)
+    {
+        if method != "POST" { do rise_error(405,"Sólo se admite POST") }
+
+        op = tolower(trim(field.dstr(sobre,"op","")))
+        if op == "" { do rise_error(400,"El sobre no declara 'op'") }
+
+        //  Sin credenciales de usuario: la conexión se abre limpia y el
+        //  token se resuelve contra el catálogo de ubicaciones.
+        @__ids  = ""
+        @__user = ""
+        @__pwd  = ""
+
+        do dbr.setHashUnicode(@true)
+        ref db = get_db()
+
+        do svc.autorizar(db, sobre)
+
+        using response
+        {
+            @"op": op
+            @"ubicacion": @svc.ubic
+            @"servidor": date_str(now(),"yyyy-MM-ddThh:mm:ss")
+        }
+
+        //  ping: verifica token, ubicación y reloj antes de que nadie
+        //  intente vender. Es lo que se corre en el alta.
+        if op == "ping" { }
+        else if op == "tx"
+        {
+            ref acuse = svc.tx(db, sobre)
+            response<"acuse*">: acuse
+        }
+        else if op == "baja"
+        {
+            ref lote = svc.baja(db, sobre)
+            response<"lote*">: lote
+        }
+        else { do rise_error(400,"Operación no admitida: " + op) }
+
+        if isset("@open_connection")
+        {
+            if @open_connection
+            {
+                do dbr.close(db)
+                @http_context<"session/idp/database*"> : db
+            }
+        }
+
+        exception
+        {
+            do errordet(@false)
+            if isset("@open_connection")
+            {
+                if @open_connection
+                {
+                    if dbr.in_transaction(db) { do dbr.rollback(db) }
+                    do dbr.close(db)
+                    @http_context<"session/idp/database*"> : db
+                }
+            }
+
+            using response
+            {
+                @"success": @false
+                @"message": last_error()
+            }
+        }
+    }
+}

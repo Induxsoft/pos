@@ -1,0 +1,309 @@
+#include "dkli.dkh"
+#!
+//  ===================================================================
+//  POS Sync — auxiliares del servicio de la central
+//  ===================================================================
+module ""
+{
+    @svc.ubic = ""
+
+    //  Las dos consultas del acuse. Ver acuse.sql para la versión
+    //  comentada y las notas sobre cardex.docorden.
+    @svc.sql_acuse_exi = "SELECT p.codigo AS producto,
+       a.codigo AS almacen,
+       e.existencia,
+       e.saldo
+FROM (
+        SELECT DISTINCT dc.iproducto,
+               dc.ialmacen
+        FROM pos_paquete_trans t
+        INNER JOIN venta   v  ON v.sys_guid = t.transaccionid
+        INNER JOIN cardex  c  ON c.docventa = v.sys_pk
+        INNER JOIN dcardex dc ON dc.fk_cardex_movimientos = c.sys_pk
+        WHERE t.origen = @origen AND t.transaccion = 'venta'
+
+        UNION
+
+        SELECT DISTINCT dc.iproducto,
+               dc.ialmacen
+        FROM pos_paquete_trans t
+        INNER JOIN orden   o  ON o.sys_guid = t.transaccionid
+        INNER JOIN cardex  c  ON c.docorden = o.sys_pk
+        INNER JOIN dcardex dc ON dc.fk_cardex_movimientos = c.sys_pk
+        WHERE t.origen = @origen AND t.transaccion = 'orden'
+     ) x
+INNER JOIN producto p ON p.sys_pk = x.iproducto
+INNER JOIN almacen  a ON a.sys_pk = x.ialmacen
+LEFT  JOIN existencias e
+       ON e.fk_producto_iexistencias = x.iproducto
+      AND e.ialmacen = x.ialmacen
+ORDER BY a.codigo, p.codigo"
+
+    @svc.sql_acuse_sal = "SELECT c.codigo AS cliente,
+       c.saldo
+FROM pos_paquete_trans t
+INNER JOIN venta   v ON v.sys_guid = t.transaccionid
+INNER JOIN cliente c ON c.sys_pk = v.icliente
+WHERE t.origen = @origen AND t.transaccion = 'venta'
+GROUP BY c.codigo, c.saldo"
+
+
+    //  ---------------------------------------------------------------
+    //  Autenticación
+    //
+    //  El Bearer NO es un identificador de sesión: es el token de una
+    //  ubicación. Por eso este servicio no usa el `ids` de
+    //  GetDataAutentication — abre la conexión sin credenciales y
+    //  resuelve el token contra el catálogo.
+    //
+    //  El token identifica la ubicación, así que el origen no la
+    //  declara: la central la resuelve. El sobre la trae además para
+    //  cotejo cruzado, y eso es lo que atrapa la instalación clonada
+    //  —alguien levanta la segunda sucursal copiando la primera y se le
+    //  olvida cambiarla— antes de que escriba nada.
+    //  ---------------------------------------------------------------
+    svc.autorizar :: &db, &sobre
+    {
+        http_auth = @@(@http_context, "$request/headers/HTTP_AUTHORIZATION")
+        if not(contains(http_auth,"Bearer")) { do rise_error(401,"Se esperaba un token Bearer") }
+
+        token = trim(replace(http_auth,"Bearer",""))
+        if token == "" { do rise_error(401,"Token vacío") }
+
+        new p { @"token": token }
+        ref u = dbr.rec(db,"SELECT codigo FROM ubicacion WHERE sync_token=@token",p)
+        if isnull(u) { do rise_error(401,"El token no corresponde a ninguna ubicación, o fue revocado") }
+
+        @svc.ubic = trim(@@(u,"$codigo"))
+
+        //  Cotejo cruzado. Mensaje distinto del de token inválido: son
+        //  dos diagnósticos distintos y el segundo es el que va a pasar
+        //  en campo.
+        declarada = trim(field.dstr(sobre,"ubicacion",""))
+        if declarada != "" && declarada != @svc.ubic
+        {
+            do rise_error(409,"El sobre declara la ubicación " + declarada + " pero el token corresponde a " + @svc.ubic + ". Revise el archivo de configuración del punto.")
+        }
+
+        return @svc.ubic
+    }
+
+    //  ---------------------------------------------------------------
+    //  Bandejas de la central
+    //
+    //  SÓLO forenses. Aquí el paquete se procesa dentro del ciclo HTTP,
+    //  así que un archivo en `entrada` no es trabajo pendiente que
+    //  alguien vaya a retomar: es evidencia de lo que llegó. No hay
+    //  reintentos de este lado — pasa o no pasa.
+    //
+    //  `procesados` crece rápido con varias sucursales: necesita purga
+    //  por antigüedad.
+    //  ---------------------------------------------------------------
+    @_def_pos_sync_trabajo="./trabajo_sync"
+    @pos_sync_trabajo=@_def_pos_sync_trabajo
+
+    svc.archivar :: cual, id, &data
+    {
+        if trim(@pos_sync_trabajo) == ""{@pos_sync_trabajo=@_def_pos_sync_trabajo}
+        d = path.concat(@pos_sync_trabajo, cual)
+        do dir.ensure(d)
+        do file.wtext(path.concat(d, @svc.ubic + "-" + id + ".fttjson"), to.json(data))
+        return 1
+        exception { return 0 }
+    }
+
+    //  ---------------------------------------------------------------
+    //  Operación tx
+    //
+    //  Importar, registrar bitácora, afectar y armar el acuse son fases
+    //  de UN ciclo, no procesos encadenados: el punto espera la
+    //  respuesta. Si la afectación falla, falla la petición completa y
+    //  el punto reenvía. No hay acuse parcial ni estado pendiente.
+    //
+    //  Con reenvío a ciegas el mismo paquete puede llegar dos veces. Los
+    //  documentos están protegidos por el upsert y la bitácora por su
+    //  índice único, pero la AFECTACIÓN tiene que ser idempotente por su
+    //  cuenta. Eso es del lado del programador de la central.
+    //  ---------------------------------------------------------------
+    svc.tx :: &db, &sobre
+    {
+        ref paquete = @@(sobre,"&paquete")
+        if isnull(paquete) { do rise_error(400,"El sobre no trae 'paquete'") }
+
+        id = trim(field.dstr(paquete,"uuid",""))
+        if id == "" { do rise_error(400,"El paquete no declara 'uuid'") }
+        
+        @pos_sync_trabajo=dbr.vars.get(db,"pos_sync_trabajo")
+        do svc.archivar("entrada", id, paquete)
+
+        //  Los parámetros globales bajan a todos los niveles del árbol:
+        //  es lo que permite que el `after` de venta y orden registre su
+        //  paso en pos_paquete_trans sin recorrer el paquete otra vez.
+        new p
+        {
+            @"__origen": id
+            @"__location_id": @svc.ubic
+        }
+
+        do dbr.ftt.import.px(db, paquete, sync.config_import(), p)
+
+        //  Afectación. La escribe el programador de la central; aquí
+        //  sólo se invoca. Sin ella el acuse no tiene qué devolver,
+        //  porque su fuente es el dcardex que la afectación genera.
+        do dbr.begin(db)
+
+        do svc.afectar(db, id)
+
+        do dbr.commit(db)
+
+        ref acuse = svc.acuse(db, id)
+       
+        do svc.archivar("procesados", id, paquete)
+        return acuse
+
+        exception
+        {
+            if dbr.in_transaction(db){do dbr.rollback(db)}
+            do svc.archivar("error", id, paquete)
+            do rise_error(last_error_code(), last_error())
+        }
+    }
+
+    //  Punto de extensión. Debe ser IDEMPOTENTE: un paquete reenviado
+    //  llega aquí por segunda vez.
+    svc.afectar :: &db, id
+    {
+        new params
+        {
+            @"code_cat_sal":dbr.vars.get(db,"v12.ventas.salida")
+            @"code_cat_ent":dbr.vars.get(db,"v12.ventas.salida")
+            @"code_sal_venta":dbr.vars.get(db,"v12.ventas.salida")
+            @"trans":@false
+            @"id":id
+        }
+
+        ref l = dbr.table(db,"SELECT v.sys_pk kventa, v.sys_guid gventa,v.icliente
+            FROM pos_paquete_trans t
+            INNER JOIN venta v ON v.sys_guid = t.transaccionid
+            WHERE t.origen=@id AND t.transaccion='venta'",params)
+
+        @erp.dprod.CLASES="2,5,6,4"
+
+        for i=0; i<table.rows(l)
+        {
+            ref row = row.get(l,i)
+            
+            params<"venta">: field.num(row,"kventa")
+            params<"icliente">: field.num(row,"icliente")
+
+            new context
+            {
+                @"db*": db
+                @"action": "producir_ventas"
+                // @"metodo": pos_metodo_produccion
+                @"descripcion_salida": dbr.vars.get(db,"dprod_output_description")
+                @"descripcion_entrada": dbr.vars.get(db,"dprod_input_description")
+                @"cat_salida": dbr.num(db,"SELECT sys_pk from categoria where codigo=@code_cat_sal",params)
+                @"cat_entrada": dbr.num(db,"SELECT sys_pk from categoria where codigo=@code_cat_ent",params)
+                @"cat_venta": dbr.num(db,"SELECT sys_pk from categoria where codigo=@code_sal_venta",params)
+                @"kventa": @@(params,"#venta")
+                @"trans": @@(params,"#trans")
+                @"gen_error": parse.bool(dbr.vars.getd(db,"pos_detener_primer_error","true"))
+            }
+            
+            if parse.bool(dbr.vars.get(db,"pos_afectar_existencias"))
+            {
+                do erp.dprod.salidasxventas(db, context)
+            }
+            
+            // afectar saldo cliente
+            sql="UPDATE cliente c
+                    LEFT JOIN (SELECT icliente, SUM(IFNULL(debe,0))-SUM(IFNULL(haber,0)) t
+                                FROM dcxc GROUP BY icliente) s ON s.icliente=c.sys_pk
+                    SET c.saldo=IFNULL(s.t,0)
+                    WHERE c.sys_pk=@icliente"
+
+            do dbr.execute(db,sql,params)
+        }
+
+        return 1
+    }
+
+    //  ---------------------------------------------------------------
+    //  El acuse
+    //
+    //  Es un lote de bajada PARCIAL: la ausencia de un par no significa
+    //  nada. Por eso viaja con el mismo sobre que las bajadas y la local
+    //  lo aplica con la misma maquinaria, sin barrer.
+    //
+    //  La fuente es el dcardex que la central acaba de generar, no las
+    //  partidas del documento: ahí ya están los componentes que salieron
+    //  por recetas y producción. La receta es intención; el cardex es
+    //  hecho.
+    //  ---------------------------------------------------------------
+    svc.acuse :: &db, id
+    {
+        new p { @"origen": id }
+
+        ref exi = dbr.list(db,@svc.sql_acuse_exi,p)
+        ref sal = dbr.list(db,@svc.sql_acuse_sal,p)
+
+        new data
+        {
+            @"uuid": uuid()
+            @"timestamp": date_str(now(),"yyyy-MM-ddThh:mm:ss")
+            @"lote": "acuse"
+            @"ubicacion": @svc.ubic
+            @"alcance": "parcial"
+            @"transactions*": list.create()
+        }
+
+        ref transactions=field.obj(data,"transactions")
+
+        do list.add(transactions, svc.trans("existencia", exi))
+        do list.add(transactions, svc.trans("saldo_cliente", sal))
+
+        return data
+    }
+
+    //  Envuelve una lista de filas en una transacción FTT.
+    svc.trans :: tipo, &filas
+    {
+        ref rows = list.create()
+        for i=0; i<@count(filas)
+        {
+            new r { @"data*": @item(filas,i) }
+            do list.add(rows, r)
+        }
+        new t
+        {
+            @"type": tipo
+            @"rows*": rows
+        }
+        return t
+    }
+
+    //  ---------------------------------------------------------------
+    //  Operación baja
+    //  ---------------------------------------------------------------
+    svc.baja :: &db, &sobre
+    {
+        lote = tolower(trim(field.dstr(sobre,"lote","")))
+        if lote == "" { do rise_error(400,"El sobre no trae 'lote'") }
+
+        ref c = baj.config(lote)
+        if not(field.exist(c,"export")) { do rise_error(404,"Lote desconocido: " + lote) }
+
+        new p { @"ubic": @svc.ubic }
+        if @svc.ubic == "*"{do field.remove(p,"ubic")}
+        ref data = dbr.ftt.export.px(db, field.obj(c,"export"), p)
+
+        //  El timestamp que pone el motor es NOW() del servidor: ésa es
+        //  la marca del lote, y es lo único que ordena las escrituras en
+        //  la local. Un lote lento nunca revierte a uno más fresco.
+        data<"lote">: lote
+        data<"ubicacion">: @svc.ubic
+        data<"alcance">: field.dstr(c,"alcance","parcial")
+        return data
+    }
+}
