@@ -777,7 +777,7 @@ module ":minipos"
         ",@null)
 
         ref cajeros = dbr.list(db,"
-            SELECT codigo AS id, nombre, contrasena AS pwd, (IFNULL(uf_sys_baja,0)<>0) AS activo
+            SELECT codigo AS id, nombre, contrasena AS pwd, (IFNULL(uf_sys_baja,1)<>0) AS activo
             FROM cajero
             WHERE NOT IFNULL(sys_deleted,0)
             ORDER BY codigo

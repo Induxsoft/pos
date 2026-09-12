@@ -117,6 +117,8 @@ program "POS Services"
         exception
         {
             // do file.wtext(@log_file+"exception.txt",last_error())
+            // do file.wtext(@log_file+"headers.json",to.json(@_HEADERS))
+            // do file.wtext(@log_file+"payload.json",to.json(payload))
             if dbr.in_transaction(db) { do dbr.rollback(db) }
             using response
             {
