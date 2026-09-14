@@ -10,7 +10,10 @@ program "POS Services"
     #include "dbr.folios.dkl"
     #include "dbr.security.dkl"
     #include "website.dkl"
+    #include "inventario/movimientos.dkh"
+    #include "ventas/_lib/list.queries.dk"
     #include "ventas/_lib/config.dk"
+    #include "ventas/procesos.dkh"
     #include "./lib.minipos.dk"
 
     // @logs_path = "/usr/dkl_test/pos/_services/sync/logs"
@@ -97,6 +100,7 @@ program "POS Services"
                     {
                         ref corte = minipos.obtenerCorteCache(db,@@(item,"$turno"))
                         if not(isnull(corte)) { do minipos.CrearMovcaja(db,item,@@(corte,"#sys_pk")) }
+                        do minipos.procesarVenta(db,@@(venta,"#sys_pk"))
                     }
 
                     do dbr.commit(db)

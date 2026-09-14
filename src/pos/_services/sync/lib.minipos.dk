@@ -101,6 +101,8 @@ module ":minipos"
 
         if isnull(obtenerCaja(db,@caja)) { do rise_error(404,"No fue posible resolver la caja: "+@caja) }
 
+        @affectar_existencias = parse.bool(dbr.vars.getd(db,"minipos.affect_inventory","true"))
+        @enviar_clientes = parse.bool(dbr.vars.get(db,"minipos.send_customers"))
         @decimales_en_importe = parse.num(dbr.vars.get(db,"FXCA001"))
         @decimales_en_volumen = parse.num(dbr.vars.get(db,"FXCA002"))
         @divisa_predeterminada = parse.num(dbr.vars.get(db,"FXCA013"))
@@ -116,6 +118,8 @@ module ":minipos"
         
         cat = dbr.vars.get(db,"pos_cat_movcaja")
         @categoria_movcaja = dbr.num(db,ftext("SELECT sys_pk FROM categoria WHERE codigo = '#<cat>'"),@null)
+        cat = dbr.vars.get(db,"v12.ventas.salida")
+        @categoria_salida = dbr.num(db,ftext("SELECT sys_pk FROM categoria WHERE codigo = '#<cat>'"),@null)
 
         url_root_foodbev = trim(dbr.vars.get(db,"pos_url_root_img_foot_line"))
         if url_root_foodbev != ""
@@ -499,6 +503,18 @@ module ":minipos"
         return importes
     }
 
+    procesarVenta :: &db, iventa
+    {
+        if not(@affectar_existencias) { return }
+        
+        // Generar movimiento de salida de inventario y aplicar.
+        mov_sys_pk = erp.ventas.procesos.salidaInventario(db,iventa,@categoria_salida)
+        if mov_sys_pk > 0 { do erp.inventario.aplicar_mov(db,mov_sys_pk,@true) }
+
+        // Establecer los estados correspondientes.
+        do erp.ventas.procesos.setStatus(db,iventa,@fp_contado)
+    }
+
     /**
      * @param Object data - Datos de la venta a importar.
      */
@@ -543,7 +559,7 @@ module ":minipos"
             @"impuesto4": 0
             @"notas": "Sincronizado - MiniPOS v1"
             @"statusadministrativo": if(esta_vigente, @stt_adm_procesado, @stt_adm_cancelado)
-            @"statusentrega": if(esta_vigente, @stt_ent_entregado, @stt_ent_na)
+            @"statusentrega": if(esta_vigente, @stt_ent_xentregar, @stt_ent_na)
             @"statusfacturacion": if(esta_vigente, @stt_fac_xfacturar, @stt_fac_na)
             @"statusfinanciero": if(esta_vigente, @stt_fin_saldado, @stt_fin_na)
             @"formapago": @fp_contado
@@ -768,13 +784,18 @@ module ":minipos"
             }
             do list.add(productos,producto)
         }
+        response<"productos*"> : productos
 
-        ref clientes = dbr.list(db,"
-            SELECT codigo AS id, nombre, rfc
-            FROM cliente
-            WHERE NOT IFNULL(sys_deleted,0)
-            ORDER BY codigo
-        ",@null)
+        if @enviar_clientes
+        {
+            ref clientes = dbr.list(db,"
+                SELECT codigo AS id, nombre, rfc
+                FROM cliente
+                WHERE NOT IFNULL(sys_deleted,0)
+                ORDER BY codigo
+            ",@null)
+            response<"clientes*"> : clientes
+        }
 
         ref cajeros = dbr.list(db,"
             SELECT codigo AS id, nombre, contrasena AS pwd, (IFNULL(uf_sys_baja,1)<>0) AS activo
@@ -783,8 +804,6 @@ module ":minipos"
             ORDER BY codigo
         ",@null)
 
-        response<"productos*"> : productos
-        response<"clientes*"> : clientes
         response<"cajeros*"> : cajeros
         response<"fotos*"> : fotos
         response<"fecha"> : date_str(now(),"yyyy-MM-ddTHH:mm:sszzz")
