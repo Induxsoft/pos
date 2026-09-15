@@ -211,7 +211,7 @@ GROUP BY c.codigo, c.saldo"
                 @"gen_error": parse.bool(dbr.vars.getd(db,"pos_detener_primer_error","true"))
             }
             
-            if parse.bool(dbr.vars.get(db,"pos_afectar_existencias"))
+            if parse.bool(dbr.vars.getd(db,"maxipos.affect_inventory","true"))
             {
                 do erp.dprod.salidasxventas(db, context)
             }
@@ -295,9 +295,21 @@ GROUP BY c.codigo, c.saldo"
         if not(field.exist(c,"export")) { do rise_error(404,"Lote desconocido: " + lote) }
 
         new p { @"ubic": @svc.ubic }
-        if @svc.ubic == "*"{do field.remove(p,"ubic")}
-        ref data = dbr.ftt.export.px(db, field.obj(c,"export"), p)
-
+        if @svc.ubic == "*" { do field.remove(p,"ubic") }
+        // ref data = dbr.ftt.export.px(db, field.obj(c,"export"), p)
+        if not(parse.bool(dbr.vars.get(db,"maxipos.send_customers"))) && (lote == "cliente" || lote == "saldos")
+        {
+            new data
+            {
+                @"uuid": uuid()
+                @"timestamp": date_str(now(),"yyyy-MM-ddThh:mm:ss")
+                @"transactions*": list.create()
+            }
+        }
+        else
+        {
+            ref data = dbr.ftt.export.px(db, field.obj(c,"export"), p)
+        }
         //  El timestamp que pone el motor es NOW() del servidor: ésa es
         //  la marca del lote, y es lo único que ordena las escrituras en
         //  la local. Un lote lento nunca revierte a uno más fresco.
