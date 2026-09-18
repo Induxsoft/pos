@@ -792,6 +792,126 @@
                         "showfield":"descripcion"
                     }
                 }
+            },
+            {
+                "varname": "minipos.affect_inventory",
+                "vardefault": "1",
+                "varvalue": "1",
+                "varcaption": "Afectar existencias",
+                "varhelp": "Afectar existencias al recibir ventas",
+                "vartype": "bool",
+                "varinput": {
+                    "control": "select",
+                    "source":{
+                        "type":"list",
+                        "values":[
+                            {"value":"1", "text":"Sí"},
+                            {"value":"0", "text":"No"}
+                        ],
+                        "showfield":"text",
+                        "keyfield":"value"
+                    }
+                }
+            },
+            {
+                "varname": "minipos.send_customers",
+                "vardefault": "0",
+                "varvalue": "0",
+                "varcaption": "Enviar catálogo de clientes",
+                "varhelp": "",
+                "vartype": "bool",
+                "varinput": {
+                    "control": "select",
+                    "source":{
+                        "type":"list",
+                        "values":[
+                            {"value":"1", "text":"Sí"},
+                            {"value":"0", "text":"No"}
+                        ],
+                        "showfield":"text",
+                        "keyfield":"value"
+                    }
+                }
+            },
+            {
+                "varname": "maxipos.affect_inventory",
+                "vardefault": "1",
+                "varvalue": "1",
+                "varcaption": "Afectar existencias",
+                "varhelp": "Afectar existencias al recibir ventas",
+                "vartype": "bool",
+                "varinput": {
+                    "control": "select",
+                    "source":{
+                        "type":"list",
+                        "values":[
+                            {"value":"1", "text":"Sí"},
+                            {"value":"0", "text":"No"}
+                        ],
+                        "showfield":"text",
+                        "keyfield":"value"
+                    }
+                }
+            },
+            {
+                "varname": "maxipos.send_customers",
+                "vardefault": "0",
+                "varvalue": "0",
+                "varcaption": "Enviar catálogo de clientes y saldos",
+                "varhelp": "",
+                "vartype": "bool",
+                "varinput": {
+                    "control": "select",
+                    "source":{
+                        "type":"list",
+                        "values":[
+                            {"value":"1", "text":"Sí"},
+                            {"value":"0", "text":"No"}
+                        ],
+                        "showfield":"text",
+                        "keyfield":"value"
+                    }
+                }
+            },
+            {
+                "varname": "pos_ag_show_zown",
+                "vardefault": "0",
+                "varvalue": "0",
+                "varcaption": "Ver solo las cuentas de la zona del vendedor",
+                "varhelp": "",
+                "vartype": "bool",
+                "varinput": {
+                    "control": "select",
+                    "source":{
+                        "type":"list",
+                        "values":[
+                            {"value":"1", "text":"Sí"},
+                            {"value":"0", "text":"No"}
+                        ],
+                        "showfield":"text",
+                        "keyfield":"value"
+                    }
+                }
+            },
+            {
+                "varname": "pos_ag_open_zown",
+                "vardefault": "1",
+                "varvalue": "1",
+                "varcaption": "Abrir cuentas predeterminadas de la zona",
+                "varhelp": "El vendedor solo puede abrir cuentas predeterminadas de su zona",
+                "vartype": "bool",
+                "varinput": {
+                    "control": "select",
+                    "source":{
+                        "type":"list",
+                        "values":[
+                            {"value":"1", "text":"Sí"},
+                            {"value":"0", "text":"No"}
+                        ],
+                        "showfield":"text",
+                        "keyfield":"value"
+                    }
+                }
             }
         ]
     }
